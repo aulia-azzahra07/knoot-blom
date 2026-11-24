@@ -13,7 +13,6 @@ import ProductDetailPage from './views/ProductDetailPage';
 import CheckoutPage from './views/CheckoutPage';
 import MyAccountPage from './views/MyAccountPage';
 import AboutPage from './views/AboutPage';
-import BlogPage from './views/BlogPage';
 import AdminPortalPage from './views/AdminPortalPage';
 import LoginPage from './views/LoginPage';
 
@@ -647,13 +646,6 @@ export default function App() {
 
         {currentView === 'about' && (
           <AboutPage onNavigate={handleNavigate} />
-        )}
-
-        {currentView === 'blog' && (
-          <BlogPage
-            onNavigate={handleNavigate}
-            onOpenCustomKit={() => setIsCustomKitOpen(true)}
-          />
         )}
       </main>
 

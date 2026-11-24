@@ -23,7 +23,6 @@ export default function Navbar({
     { id: 'home', label: 'Home' },
     { id: 'shop', label: 'Shop' },
     { id: 'account', label: 'Lacak Pesanan', badge: pendingOrdersCount },
-    { id: 'blog', label: 'Blog' },
     { id: 'about', label: 'About' }
   ];
 
