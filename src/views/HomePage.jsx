@@ -157,31 +157,10 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* 4. DUAL FEATURE PROMO BANNERS */}
+      {/* 4. FEATURE PROMO BANNER */}
       <section className="promo-banners-section container">
         <div className="promo-banners-grid">
-          {/* Card 1: Mulai Petualangan Merajutmu */}
-          <div className="promo-banner-box banner-diy">
-            <div className="promo-text-content">
-              <span className="promo-tag">Pemula & Hobi Baru</span>
-              <h3 className="promo-title">Mulai Petualangan Merajutmu!</h3>
-              <p className="promo-desc">
-                Dapatkan DIY kit lengkap + panduan video untuk pemula. Yuk, bikin karya sendiri!
-              </p>
-              <button
-                className="promo-btn btn-diy-link"
-                onClick={() => onNavigate('shop')}
-              >
-                <span>Lihat Katalog</span>
-                <ArrowRight size={16} />
-              </button>
-            </div>
-            <div className="promo-banner-img">
-              <img src="/images/diy-crochet-kit.jpg" alt="DIY Kit" />
-            </div>
-          </div>
-
-          {/* Card 2: Buat Pesanan Custom Sendiri */}
+          {/* Buat Pesanan Custom Sendiri */}
           <div className="promo-banner-box banner-custom">
             <div className="promo-text-content">
               <span className="promo-tag">Kado & Koleksi Personal</span>
