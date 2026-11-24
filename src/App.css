@@ -585,11 +585,11 @@
 
 .promo-banner-box {
   border-radius: var(--radius-xl);
-  padding: 36px;
+  padding: 28px 36px;
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 20px;
+  gap: 32px;
   box-shadow: var(--shadow-sm);
   border: 1px solid transparent;
   transition: var(--transition);
@@ -664,11 +664,13 @@
 }
 
 .promo-banner-img {
-  width: 100%;
+  width: 220px;
+  max-width: 100%;
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
 }
 
 .promo-banner-img img {
@@ -5810,6 +5812,18 @@
 
   .promo-banners-grid {
     grid-template-columns: 1fr;
+  }
+
+  .promo-banner-box {
+    grid-template-columns: 1fr;
+    padding: 24px;
+    gap: 20px;
+  }
+
+  .promo-banner-img {
+    width: 100%;
+    max-width: 220px;
+    margin: 0 auto;
   }
 
   .story-testimonial-grid {
