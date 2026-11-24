@@ -1,10 +1,7 @@
 export const CATEGORIES = [
   { id: 'all', name: 'Semua Produk', icon: 'Sparkles', color: '#FF86C1' },
   { id: 'aksesoris', name: 'Aksesoris', icon: 'Heart', color: '#5DE5AB' },
-  { id: 'tas-rajut', name: 'Tas Rajut', icon: 'ShoppingBag', color: '#A7D8FF' },
-  { id: 'amigurumi', name: 'Amigurumi', icon: 'Smile', color: '#FEDEA4' },
-  { id: 'diy-kit', name: 'DIY Kit', icon: 'Package', color: '#EEDBFF' },
-  { id: 'alat-benang', name: 'Alat & Benang', icon: 'Scissors', color: '#FEDEA4' }
+  { id: 'tas-rajut', name: 'Tas Rajut', icon: 'ShoppingBag', color: '#A7D8FF' }
 ];
 
 export const PRODUCTS = [
