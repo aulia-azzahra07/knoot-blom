@@ -10,7 +10,6 @@ import GiftChatbot from './components/GiftChatbot';
 import HomePage from './views/HomePage';
 import ShopPage from './views/ShopPage';
 import ProductDetailPage from './views/ProductDetailPage';
-import DiyKitPage from './views/DiyKitPage';
 import CheckoutPage from './views/CheckoutPage';
 import MyAccountPage from './views/MyAccountPage';
 import AboutPage from './views/AboutPage';
@@ -602,17 +601,6 @@ export default function App() {
             onToggleWishlist={handleToggleWishlist}
             onBackToShop={() => setCurrentView('shop')}
             showToast={showToast}
-          />
-        )}
-
-        {currentView === 'diy-kit' && (
-          <DiyKitPage
-            products={products}
-            onSelectProduct={handleSelectProduct}
-            onAddToCart={handleAddToCart}
-            wishlist={wishlist}
-            onToggleWishlist={handleToggleWishlist}
-            onOpenCustomKit={() => setIsCustomKitOpen(true)}
           />
         )}
 

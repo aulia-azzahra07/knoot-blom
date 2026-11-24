@@ -88,7 +88,6 @@ export default function Footer({ setCurrentView }) {
               <ul className="footer-links">
                 <li><button onClick={() => handleNavClick('home')}>Beranda</button></li>
                 <li><button onClick={() => handleNavClick('shop')}>Semua Katalog</button></li>
-                <li><button onClick={() => handleNavClick('diy-kit')}>Paket DIY Kit</button></li>
                 <li><button onClick={() => handleNavClick('blog')}>Blog & Tips Rajut</button></li>
                 <li><button onClick={() => handleNavClick('about')}>Tentang & Proposal Kami</button></li>
               </ul>

@@ -22,7 +22,6 @@ export default function Navbar({
   const navLinks = [
     { id: 'home', label: 'Home' },
     { id: 'shop', label: 'Shop' },
-    { id: 'diy-kit', label: 'DIY Kit' },
     { id: 'account', label: 'Lacak Pesanan', badge: pendingOrdersCount },
     { id: 'blog', label: 'Blog' },
     { id: 'about', label: 'About' }

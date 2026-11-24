@@ -170,9 +170,9 @@ export default function HomePage({
               </p>
               <button
                 className="promo-btn btn-diy-link"
-                onClick={() => onNavigate('diy-kit')}
+                onClick={() => onNavigate('shop')}
               >
-                <span>Lihat DIY Kit</span>
+                <span>Lihat Katalog</span>
                 <ArrowRight size={16} />
               </button>
             </div>
