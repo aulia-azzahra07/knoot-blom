@@ -24,9 +24,7 @@ export default function ShopPage({
     { id: 'all', label: 'Semua Kategori' },
     { id: 'amigurumi', label: 'Amigurumi' },
     { id: 'tas-rajut', label: 'Tas Rajut' },
-    { id: 'aksesoris', label: 'Aksesoris' },
-    { id: 'diy-kit', label: 'DIY Kit' },
-    { id: 'alat-benang', label: 'Alat & Benang' }
+    { id: 'aksesoris', label: 'Aksesoris' }
   ];
 
   const priceFilters = [
