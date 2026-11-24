@@ -22,7 +22,6 @@ export default function ShopPage({
   // Filter categories list
   const categoryFilters = [
     { id: 'all', label: 'Semua Kategori' },
-    { id: 'amigurumi', label: 'Amigurumi' },
     { id: 'tas-rajut', label: 'Tas Rajut' },
     { id: 'aksesoris', label: 'Aksesoris' }
   ];
