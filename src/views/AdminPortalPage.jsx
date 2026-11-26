@@ -1066,7 +1066,7 @@ export default function AdminPortalPage({
                   <ul className="role-permissions-list">
                     <li>✓ Menjelajahi katalog produk, filter kategori & pencarian</li>
                     <li>✓ Menambah produk ke Keranjang Belanja</li>
-                    <li>✓ Custom Order rajut & Custom DIY Starter Kit</li>
+                    <li>✓ Custom Order rajut sesuai keinginan</li>
                     <li>✓ Melakukan Checkout, memilih kurir & metode pembayaran</li>
                     <li>✓ Menyimpan Wishlist barang favorit</li>
                     <li>✓ Memantau riwayat & status pesanan di "Akun Saya"</li>
@@ -1537,7 +1537,6 @@ function ProductFormModal({ isOpen, editingProduct, onClose, onSave }) {
     { label: 'Mini Crochet Bag', url: '/images/mini-crochet-bag.jpg' },
     { label: 'Bear Amigurumi', url: '/images/bear-amigurumi.jpg' },
     { label: 'Strawberry Pouch', url: '/images/strawberry-pouch.jpg' },
-    { label: 'DIY Crochet Kit', url: '/images/diy-crochet-kit.jpg' },
     { label: 'Bunny Amigurumi', url: '/images/hero-bunny.jpg' }
   ];
 

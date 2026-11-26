@@ -46,7 +46,7 @@ export default function CheckoutPage({
 
   // Pastikan setiap item non-custom memakai harga & gambar terbaru dari tabel `products` Supabase
   const resolvedCartItems = cartItems.map((item) => {
-    if (item.isCustom || item.isCustomKit) return item;
+    if (item.isCustom) return item;
     const dbProd = products.find((p) => p.id === item.id || (item.slug && p.slug === item.slug));
     if (!dbProd) return item;
     return {
@@ -97,12 +97,12 @@ export default function CheckoutPage({
       // ── Verifikasi harga terbaru langsung dari tabel `products` di Supabase ──
       const dbProductsMap = await fetchProductsByIds(
         resolvedCartItems
-          .filter((item) => !item.isCustom && !item.isCustomKit)
+          .filter((item) => !item.isCustom)
           .map((item) => item.id || item.productId)
       );
 
       const verifiedCartItems = resolvedCartItems.map((item) => {
-        if (item.isCustom || item.isCustomKit) return item;
+        if (item.isCustom) return item;
         const dbProd = dbProductsMap[item.id || item.productId];
         if (!dbProd) return item;
         return {

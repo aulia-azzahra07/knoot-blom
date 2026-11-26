@@ -550,7 +550,7 @@
 
 .promo-banners-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
 }
 
@@ -570,11 +570,6 @@
 .promo-banner-box:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-md);
-}
-
-.banner-diy {
-  background: linear-gradient(135deg, #EBF8FF 0%, #EEDBFF 100%);
-  border-color: #D6ECFA;
 }
 
 .banner-custom {
@@ -613,15 +608,6 @@
   border-radius: var(--radius-full);
   font-weight: 600;
   font-size: 0.9rem;
-}
-
-.btn-diy-link {
-  background-color: #0284C7;
-  color: #fff;
-}
-
-.btn-diy-link:hover {
-  background-color: #0369A1;
 }
 
 .btn-custom-link {
@@ -1515,158 +1501,6 @@
   font-size: 0.95rem;
   color: var(--color-text);
   line-height: 1.6;
-}
-
-/* =======================================================
-   DIY KIT PAGE (SCREEN 4)
-======================================================= */
-.diy-hero-banner {
-  background: linear-gradient(135deg, #FFF0F6 0%, #E8FBF2 50%, #EEDBFF 100%);
-  border-radius: var(--radius-xl);
-  padding: 48px;
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  align-items: center;
-  gap: 36px;
-  margin-bottom: 48px;
-  box-shadow: var(--shadow-card);
-  border: 1px solid #FFD8E8;
-}
-
-.diy-title {
-  font-size: 3rem;
-  margin-bottom: 12px;
-}
-
-.diy-subtitle {
-  font-size: 1.05rem;
-  color: var(--color-text-muted);
-  margin-bottom: 24px;
-}
-
-.diy-perks-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.diy-perk {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.92rem;
-  font-weight: 500;
-}
-
-.diy-banner-callout {
-  position: relative;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-lg);
-  border: 4px solid #fff;
-}
-
-.diy-badge-floating {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  right: 14px;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(4px);
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  font-size: 0.82rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  z-index: 2;
-}
-
-.diy-banner-img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  display: block;
-}
-
-.diy-custom-banner {
-  margin-top: 50px;
-  margin-bottom: 50px;
-}
-
-.diy-custom-inner {
-  background: linear-gradient(135deg, #FFF6E5 0%, #FFE6F1 100%);
-  border-radius: var(--radius-xl);
-  padding: 44px;
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  align-items: center;
-  gap: 36px;
-  border: 1.5px solid #FEDEA4;
-  box-shadow: var(--shadow-card);
-}
-
-.diy-custom-title {
-  font-size: 2.2rem;
-  margin-bottom: 12px;
-}
-
-.diy-custom-desc {
-  font-size: 1rem;
-  color: var(--color-text-muted);
-  line-height: 1.6;
-  margin-bottom: 24px;
-}
-
-.btn-custom-kit-act {
-  padding: 14px 28px;
-  font-size: 1rem;
-}
-
-.diy-custom-graphic {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.yarn-stack-art {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.stack-yarn {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  border: 4px solid #fff;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-  animation: floatBob 3s ease-in-out infinite;
-}
-
-.yarn-1 {
-  animation-delay: 0s;
-}
-
-.yarn-2 {
-  animation-delay: 0.4s;
-}
-
-.yarn-3 {
-  animation-delay: 0.8s;
-}
-
-.yarn-4 {
-  animation-delay: 1.2s;
-}
-
-.yarn-caption {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #E63985;
 }
 
 /* =======================================================
@@ -5215,7 +5049,7 @@
 }
 
 /* =======================================================
-   CUSTOM MODALS (CUSTOM ORDER & DIY KIT BUILDER)
+   CUSTOM ORDER MODAL
 ======================================================= */
 .modal-backdrop {
   position: fixed;
@@ -5388,69 +5222,6 @@
 .dot-select.selected {
   outline: 2.5px solid var(--color-pink);
   outline-offset: 2px;
-}
-
-.palette-yarn-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.yarn-select-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
-  cursor: pointer;
-  transition: var(--transition);
-  font-size: 0.82rem;
-}
-
-.yarn-select-card:hover {
-  border-color: var(--color-pink);
-}
-
-.yarn-select-card.selected {
-  border-color: var(--color-pink);
-  background-color: var(--color-pink-light);
-  font-weight: 600;
-}
-
-.yarn-swatch {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.hook-size-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.hook-size-btn {
-  padding: 8px 16px;
-  border-radius: var(--radius-full);
-  border: 1.5px solid var(--color-border);
-  background: #fff;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.hook-size-btn:hover {
-  border-color: var(--color-pink);
-}
-
-.hook-size-btn.active {
-  border-color: var(--color-pink);
-  background-color: var(--color-pink);
-  color: #fff;
 }
 
 .input-with-icon {
@@ -5801,12 +5572,6 @@
   .detail-thumbs-column {
     flex-direction: row;
     order: 2;
-  }
-
-  .diy-hero-banner,
-  .diy-custom-inner {
-    grid-template-columns: 1fr;
-    padding: 28px;
   }
 
   .products-grid-3 {

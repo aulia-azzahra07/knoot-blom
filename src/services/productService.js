@@ -67,6 +67,21 @@ export const fetchProductSalesMap = async () => {
   }
 };
 
+const isDiscontinuedCategoryItem = (item) => {
+  if (!item) return false;
+  const cat = String(item.category || '').toLowerCase().trim();
+  const slug = String(item.slug || '').toLowerCase();
+  const name = String(item.name || '').toLowerCase();
+  return (
+    cat === 'diy-kit' ||
+    cat === 'diykit' ||
+    slug.includes('diy-kit') ||
+    slug.includes('diy-crochet') ||
+    name.includes('diy kit') ||
+    name.includes('diy crochet')
+  );
+};
+
 // Normalisasi satu record produk dari tabel Supabase `products`
 const mapSupabaseProduct = (item, salesMap = {}, ratingStatsMap = {}) => {
   const price = Number(item.price) || 0;
@@ -136,7 +151,9 @@ export const fetchProducts = async () => {
       return [];
     }
 
-    return data.map((item) => mapSupabaseProduct(item, salesMap, ratingStatsMap));
+    return data
+      .filter((item) => !isDiscontinuedCategoryItem(item))
+      .map((item) => mapSupabaseProduct(item, salesMap, ratingStatsMap));
   } catch (err) {
     console.error('[ProductService] Error koneksi saat memuat produk dari Supabase:', err);
     return [];

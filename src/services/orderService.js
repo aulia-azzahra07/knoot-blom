@@ -341,18 +341,18 @@ export const createCashOrderDirectly = async ({
 
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const dbProductsMap = Array.isArray(cartItems) && cartItems.length > 0
-    ? await fetchProductsByIds(
-        cartItems
-          .filter((item) => !item.isCustom && !item.isCustomKit)
-          .map((item) => item.id || item.productId)
-      )
-    : {};
+      ? await fetchProductsByIds(
+          cartItems
+            .filter((item) => !item.isCustom)
+            .map((item) => item.id || item.productId)
+        )
+      : {};
 
   const verifiedItems = Array.isArray(cartItems)
     ? cartItems.map((item) => {
         const rawId = item.id || item.productId;
         const isValidUUID = typeof rawId === 'string' && uuidRegex.test(rawId);
-        const dbProd = !item.isCustom && !item.isCustomKit && isValidUUID ? dbProductsMap[rawId] : null;
+        const dbProd = !item.isCustom && isValidUUID ? dbProductsMap[rawId] : null;
         const itemPrice = dbProd ? Number(dbProd.price) : (Number(item.price) || 0);
         const itemQty = Number(item.quantity) || 1;
         const itemName = dbProd ? dbProd.name : (item.name || 'Produk');

@@ -2,7 +2,7 @@ import React from 'react';
 import { BookOpen, Calendar, Clock, ArrowRight } from 'lucide-react';
 import { BLOG_POSTS } from '../data/products';
 
-export default function BlogPage({ onNavigate, onOpenCustomKit }) {
+export default function BlogPage({ onNavigate }) {
   return (
     <div className="blog-page-view container fade-in">
       <div className="section-title-wrap">
@@ -38,7 +38,7 @@ export default function BlogPage({ onNavigate, onOpenCustomKit }) {
               <p className="blog-card-excerpt">{post.excerpt}</p>
               <button
                 className="blog-read-btn"
-                onClick={() => onOpenCustomKit()}
+                onClick={() => onNavigate('shop')}
               >
                 <span>Baca Selengkapnya</span>
                 <ArrowRight size={16} />

@@ -55,7 +55,7 @@ export default function CartDrawer({
                 <ShoppingBag size={48} color="#FF86C1" />
               </div>
               <h3>Keranjang Belanjamu Masih Kosong</h3>
-              <p>Yuk, temukan aksesoris rajut handmade cantik dan DIY kit kesukaanmu!</p>
+              <p>Yuk, temukan aksesoris rajut handmade cantik kesukaanmu!</p>
               <button
                 className="btn-primary"
                 onClick={onClose}

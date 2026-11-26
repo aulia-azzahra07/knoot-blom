@@ -3,7 +3,6 @@ export const CATEGORIES = [
   { id: 'aksesoris', name: 'Aksesoris', icon: 'Heart', color: '#5DE5AB' },
   { id: 'tas-rajut', name: 'Tas Rajut', icon: 'ShoppingBag', color: '#A7D8FF' },
   { id: 'amigurumi', name: 'Amigurumi', icon: 'Smile', color: '#FEDEA4' },
-  { id: 'diy-kit', name: 'DIY Kit', icon: 'Package', color: '#EEDBFF' },
   { id: 'alat-benang', name: 'Alat & Benang', icon: 'Scissors', color: '#FEDEA4' }
 ];
 
@@ -20,7 +19,7 @@ export const BLOG_POSTS = [
     title: '5 Tips Merajut untuk Pemula: Dari Cara Pegang Hakpen Sampai Pola Pertama',
     date: '22 Okt 2026',
     readTime: '4 min baca',
-    image: '/images/diy-crochet-kit.jpg',
+    image: '/images/hero-bunny.jpg',
     excerpt: 'Baru mau mulai belajar merajut? Simak trik mengatur tegangan benang agar hasil jahitan rajutmu rapi dan tidak terlalu ketat.'
   },
   {

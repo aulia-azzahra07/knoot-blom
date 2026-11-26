@@ -112,7 +112,7 @@ export default function AboutPage({ onNavigate }) {
         <Heart size={36} color="#FF86C1" />
         <h2>Dukung Produk Lokal & UMKM Mahasiswa</h2>
         <p>
-          Beli karya orisinal anak bangsa atau mulai belajar merajut bersama paket DIY Kit Knot & Bloom sekarang juga!
+          Dukung dan koleksi karya rajutan handmade orisinal Knot & Bloom sekarang juga!
         </p>
         <button className="btn-primary" onClick={() => onNavigate('shop')}>
           Jelajahi Katalog Produk Sekarang

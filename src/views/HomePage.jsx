@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Sparkles, Heart, Package, Smile, ShoppingBag, Scissors, Star, User } from 'lucide-react';
+import { ArrowRight, Sparkles, Heart, Smile, ShoppingBag, Scissors, Star, User } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 import { CATEGORIES } from '../data/products';
 
@@ -11,8 +11,7 @@ export default function HomePage({
   wishlist,
   onToggleWishlist,
   onNavigate,
-  onOpenCustomOrder,
-  onOpenCustomKit
+  onOpenCustomOrder
 }) {
   // Produk unggulan di Home — pastikan Keychain Bunga ikut tampil bersama produk lain
   const bestSellers = (() => {
@@ -40,8 +39,6 @@ export default function HomePage({
         return <ShoppingBag size={24} color="#0284C7" />;
       case 'Heart':
         return <Heart size={24} color="#059669" />;
-      case 'Package':
-        return <Package size={24} color="#9333EA" />;
       case 'Scissors':
         return <Scissors size={24} color="#EA580C" />;
       default:
@@ -64,7 +61,7 @@ export default function HomePage({
               <span className="hero-title-highlight">One Stitch at a Time ♡</span>
             </h1>
             <p className="hero-description">
-              Temukan produk handmade rajutan orisinal dan DIY kit lengkap untuk membuat karya sendiri, atau hadiah spesial yang berkesan untuk orang tersayang!
+              Temukan produk handmade rajutan orisinal untuk melengkapi gayamu, atau hadiah spesial yang berkesan untuk orang tersayang!
             </p>
             <div className="hero-btn-group">
               <button
@@ -171,31 +168,10 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* 4. DUAL FEATURE PROMO BANNERS */}
+      {/* 4. FEATURE PROMO BANNER */}
       <section className="promo-banners-section container">
         <div className="promo-banners-grid">
-          {/* Card 1: Mulai Petualangan Merajutmu */}
-          <div className="promo-banner-box banner-diy">
-            <div className="promo-text-content">
-              <span className="promo-tag">Pemula & Hobi Baru</span>
-              <h3 className="promo-title">Mulai Petualangan Merajutmu!</h3>
-              <p className="promo-desc">
-                Dapatkan DIY kit lengkap + panduan video untuk pemula. Yuk, bikin karya sendiri!
-              </p>
-              <button
-                className="promo-btn btn-diy-link"
-                onClick={() => onNavigate('diy-kit')}
-              >
-                <span>Lihat DIY Kit</span>
-                <ArrowRight size={16} />
-              </button>
-            </div>
-            <div className="promo-banner-img">
-              <img src="/images/diy-crochet-kit.jpg" alt="DIY Kit" />
-            </div>
-          </div>
-
-          {/* Card 2: Buat Pesanan Custom Sendiri */}
+          {/* Buat Pesanan Custom Sendiri */}
           <div className="promo-banner-box banner-custom">
             <div className="promo-text-content">
               <span className="promo-tag">Kado & Koleksi Personal</span>

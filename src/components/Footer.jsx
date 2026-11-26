@@ -54,7 +54,7 @@ export default function Footer({ setCurrentView }) {
                 <span>Knot & Bloom</span>
               </div>
               <p className="footer-desc">
-                Dirajut dengan hati, dibawa setiap hari. Menyediakan aksesoris rajut handmade orisinal dan DIY kit lengkap untuk pemula.
+                Dirajut dengan hati, dibawa setiap hari. Menyediakan aksesoris rajut handmade orisinal berkualitas.
               </p>
               <div className="footer-address">
                 <MapPin size={16} className="footer-pin-icon" />
@@ -68,7 +68,6 @@ export default function Footer({ setCurrentView }) {
               <ul className="footer-links">
                 <li><button onClick={() => handleNavClick('home')}>Beranda</button></li>
                 <li><button onClick={() => handleNavClick('shop')}>Semua Katalog</button></li>
-                <li><button onClick={() => handleNavClick('diy-kit')}>Paket DIY Kit</button></li>
                 <li><button onClick={() => handleNavClick('blog')}>Blog & Tips Rajut</button></li>
                 <li><button onClick={() => handleNavClick('about')}>Tentang & Proposal Kami</button></li>
               </ul>

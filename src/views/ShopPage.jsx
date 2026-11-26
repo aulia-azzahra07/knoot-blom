@@ -16,7 +16,9 @@ export default function ShopPage({
   const PRICE_MAX_LIMIT = 50000;
   const PRICE_STEP = 5000;
 
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory || 'all');
+  const [selectedCategory, setSelectedCategory] = useState(
+    initialCategory && initialCategory !== 'diy-kit' ? initialCategory : 'all'
+  );
   const [minPrice, setMinPrice] = useState(PRICE_MIN_LIMIT);
   const [maxPrice, setMaxPrice] = useState(PRICE_MAX_LIMIT);
   const [selectedTag, setSelectedTag] = useState('all');
@@ -30,7 +32,6 @@ export default function ShopPage({
     { id: 'amigurumi', label: 'Amigurumi' },
     { id: 'tas-rajut', label: 'Tas Rajut' },
     { id: 'aksesoris', label: 'Aksesoris' },
-    { id: 'diy-kit', label: 'DIY Kit' },
     { id: 'alat-benang', label: 'Alat & Benang' }
   ];
 
@@ -102,7 +103,7 @@ export default function ShopPage({
       <div className="shop-header">
         <div>
           <h1 className="shop-title">Semua Produk</h1>
-          <p className="shop-subtitle">Temukan produk rajut handmade & DIY kit favoritmu di sini!</p>
+          <p className="shop-subtitle">Temukan produk rajut handmade favoritmu di sini!</p>
         </div>
 
         {/* Top Quick Filter & Search Bar */}

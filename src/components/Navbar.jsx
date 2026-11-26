@@ -24,7 +24,6 @@ export default function Navbar({
   const navLinks = [
     { id: 'home', label: 'Home' },
     { id: 'shop', label: 'Shop' },
-    { id: 'diy-kit', label: 'DIY Kit' },
     ...(!isAdminUser
       ? [{ id: 'account', label: 'Lacak Pesanan', badge: pendingOrdersCount }]
       : []),
@@ -189,7 +188,7 @@ export default function Navbar({
               <Search size={18} className="search-input-icon" />
               <input
                 type="text"
-                placeholder="Cari produk rajutan, tulip keychain, bag, DIY kit..."
+                placeholder="Cari produk rajutan, tulip keychain, pouch, bando..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus

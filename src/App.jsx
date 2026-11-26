@@ -4,13 +4,11 @@ import AdminNavbar from './components/AdminNavbar';
 import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
 import CustomOrderModal from './components/CustomOrderModal';
-import CustomDiyKitModal from './components/CustomDiyKitModal';
 import GiftChatbot from './components/GiftChatbot';
 
 import HomePage from './views/HomePage';
 import ShopPage from './views/ShopPage';
 import ProductDetailPage from './views/ProductDetailPage';
-import DiyKitPage from './views/DiyKitPage';
 import CheckoutPage from './views/CheckoutPage';
 import MyAccountPage from './views/MyAccountPage';
 import AboutPage from './views/AboutPage';
@@ -31,6 +29,25 @@ const isRealOrder = (order) => {
   if (!order || !order.id) return false;
   const idStr = String(order.id);
   return !idStr.startsWith('KB12345') && idStr !== 'KB123456' && idStr !== 'KB123455';
+};
+
+// Filter untuk membuang otomatis sisa item produk yang sudah tidak tersedia dari localStorage
+const isRemovedLegacyItem = (item) => {
+  if (!item || typeof item !== 'object') return false;
+  const id = String(item.id || '').toLowerCase();
+  const cat = String(item.category || '').toLowerCase().trim();
+  const slug = String(item.slug || '').toLowerCase();
+  const name = String(item.name || '').toLowerCase();
+  return (
+    Boolean(item.isCustomKit) ||
+    id.startsWith('custom-kit-') ||
+    cat === 'diy-kit' ||
+    cat === 'diykit' ||
+    slug.includes('diy-kit') ||
+    slug.includes('diy-crochet') ||
+    name.includes('diy kit') ||
+    name.includes('diy crochet')
+  );
 };
 
 export default function App() {
@@ -147,7 +164,12 @@ export default function App() {
   // ── NAVIGASI ─────────────────────────────────────────────────────────
   const [currentView, setCurrentView] = useState(() => {
     try {
-      if (window.location.pathname === '/lacak-pesanan') return 'account';
+      const path = window.location.pathname.toLowerCase();
+      if (path === '/diy-kit' || path.startsWith('/diy-kit/')) {
+        window.history.replaceState({}, '', '/');
+        return 'shop';
+      }
+      if (path === '/lacak-pesanan') return 'account';
       const savedRole = localStorage.getItem('kb_role');
       if (savedRole === 'admin') return 'admin';
     } catch {}
@@ -155,10 +177,16 @@ export default function App() {
   });
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Dengarkan tombol Back/Forward browser untuk route /lacak-pesanan
+  // Dengarkan tombol Back/Forward browser untuk route /lacak-pesanan dan redirect route lama
   useEffect(() => {
     const handlePopState = () => {
-      if (window.location.pathname === '/lacak-pesanan') {
+      const path = window.location.pathname.toLowerCase();
+      if (path === '/diy-kit' || path.startsWith('/diy-kit/')) {
+        window.history.replaceState({}, '', '/');
+        setCurrentView('shop');
+        return;
+      }
+      if (path === '/lacak-pesanan') {
         setCurrentView('account');
       }
     };
@@ -173,12 +201,21 @@ export default function App() {
         return products.find((p) => p.id === prev.id || p.slug === prev.slug) || products[0];
       });
 
+      // Bersihkan wishlist dari produk yang sudah tidak tersedia di katalog aktif
+      const activeProductIds = new Set(products.map((p) => p.id));
+      setWishlist((prev) => {
+        if (!Array.isArray(prev) || prev.length === 0) return prev;
+        const cleaned = prev.filter((id) => activeProductIds.has(id));
+        return cleaned.length !== prev.length ? cleaned : prev;
+      });
+
       // Sinkronkan harga & gambar item non-custom di keranjang dengan data terbaru dari tabel `products` Supabase
       setCartItems((prev) => {
         if (!Array.isArray(prev) || prev.length === 0) return prev;
-        let changed = false;
-        const synced = prev.map((item) => {
-          if (item.isCustom || item.isCustomKit) return item;
+        const withoutLegacy = prev.filter((item) => !isRemovedLegacyItem(item));
+        let changed = withoutLegacy.length !== prev.length;
+        const synced = withoutLegacy.map((item) => {
+          if (item.isCustom) return item;
           const dbProd = products.find((p) => p.id === item.id || (item.slug && p.slug === item.slug));
           if (!dbProd) return item;
           const dbPrice = Number(dbProd.price) || 0;
@@ -253,7 +290,12 @@ export default function App() {
   const [cartItems, setCartItems] = useState(() => {
     try {
       const saved = localStorage.getItem('kb_cart');
-      if (saved) return JSON.parse(saved) || [];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item) => !isRemovedLegacyItem(item));
+        }
+      }
     } catch {}
     return [];
   });
@@ -267,7 +309,12 @@ export default function App() {
   const [wishlist, setWishlist] = useState(() => {
     try {
       const saved = localStorage.getItem('kb_wishlist');
-      if (saved) return JSON.parse(saved) || [];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id) => !String(id || '').toLowerCase().startsWith('custom-kit-'));
+        }
+      }
     } catch {}
     return [];
   });
@@ -278,7 +325,6 @@ export default function App() {
 
   // ── MODALS & TOAST ────────────────────────────────────────────────────
   const [isCustomOrderOpen, setIsCustomOrderOpen] = useState(false);
-  const [isCustomKitOpen, setIsCustomKitOpen] = useState(false);
   const [activeOrderForChat, setActiveOrderForChat] = useState(null);
   const [toasts, setToasts] = useState([]);
 
@@ -515,9 +561,10 @@ export default function App() {
 
   // Add to Cart (selalu gunakan harga terbaru dari tabel `products` Supabase untuk produk katalog)
   const handleAddToCart = (product) => {
+    if (isRemovedLegacyItem(product)) return;
     const qtyToAdd = product.quantity || 1;
     const colorName = product.selectedColor?.name || 'Default';
-    const isCustom = Boolean(product.isCustom || product.isCustomKit);
+    const isCustom = Boolean(product.isCustom);
     const dbProduct = !isCustom
       ? products.find((p) => p.id === product.id || (product.slug && p.slug === product.slug))
       : null;
@@ -603,10 +650,12 @@ export default function App() {
 
   // General Navigation
   const handleNavigate = (viewId, categoryId = 'all') => {
-    if (categoryId !== 'all') {
-      setSelectedCategory(categoryId);
+    const safeView = viewId === 'diy-kit' ? 'shop' : viewId;
+    const safeCategory = categoryId === 'diy-kit' ? 'all' : categoryId;
+    if (safeCategory !== 'all') {
+      setSelectedCategory(safeCategory);
     }
-    setCurrentView(viewId);
+    setCurrentView(safeView);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -693,7 +742,6 @@ export default function App() {
             onToggleWishlist={handleToggleWishlist}
             onNavigate={handleNavigate}
             onOpenCustomOrder={() => setIsCustomOrderOpen(true)}
-            onOpenCustomKit={() => setIsCustomKitOpen(true)}
           />
         )}
 
@@ -720,17 +768,6 @@ export default function App() {
             onToggleWishlist={handleToggleWishlist}
             onBackToShop={() => setCurrentView('shop')}
             showToast={showToast}
-          />
-        )}
-
-        {currentView === 'diy-kit' && (
-          <DiyKitPage
-            products={products}
-            onSelectProduct={handleSelectProduct}
-            onAddToCart={handleAddToCart}
-            wishlist={wishlist}
-            onToggleWishlist={handleToggleWishlist}
-            onOpenCustomKit={() => setIsCustomKitOpen(true)}
           />
         )}
 
@@ -782,10 +819,7 @@ export default function App() {
         )}
 
         {currentView === 'blog' && (
-          <BlogPage
-            onNavigate={handleNavigate}
-            onOpenCustomKit={() => setIsCustomKitOpen(true)}
-          />
+          <BlogPage onNavigate={handleNavigate} />
         )}
       </main>
 
@@ -822,13 +856,6 @@ export default function App() {
           <CustomOrderModal
             isOpen={isCustomOrderOpen}
             onClose={() => setIsCustomOrderOpen(false)}
-            onAddToCart={handleAddToCart}
-            showToast={showToast}
-          />
-
-          <CustomDiyKitModal
-            isOpen={isCustomKitOpen}
-            onClose={() => setIsCustomKitOpen(false)}
             onAddToCart={handleAddToCart}
             showToast={showToast}
           />
