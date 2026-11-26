@@ -1,5 +1,6 @@
 import React from 'react';
 import { Heart, Star, ShoppingBag } from 'lucide-react';
+import { getSafeProductImage, handleProductImageError } from '../utils/productImage';
 
 export default function ProductCard({
   product,
@@ -29,7 +30,12 @@ export default function ProductCard({
     <div className="product-card">
       {/* Product Image & Badges */}
       <div className="product-image-wrap" onClick={() => onSelectProduct(product)}>
-        <img src={product.image} alt={product.name} loading="lazy" />
+        <img
+          src={getSafeProductImage(product.image, product.name)}
+          alt={product.name}
+          loading="lazy"
+          onError={(e) => handleProductImageError(e, product.name, product.image)}
+        />
 
         {/* Badge */}
         {product.tag && (
@@ -55,16 +61,22 @@ export default function ProductCard({
 
       {/* Info Content */}
       <div className="product-info">
-        {/* Rating & Sold count */}
+        {/* Rating & Sold count (Real dari tabel reviews & view product_sales) */}
         <div className="product-rating-row">
           <div className="product-stars">
-            <Star size={13} fill="#FFB703" strokeWidth={0} />
-            <span style={{ fontWeight: 600, marginLeft: 3, color: '#484F4F' }}>
-              {product.rating}
-            </span>
+            {product.reviewsCount > 0 && product.rating != null ? (
+              <>
+                <Star size={13} fill="#FFB703" strokeWidth={0} />
+                <span style={{ fontWeight: 600, marginLeft: 3, color: '#484F4F' }}>
+                  {Number(product.rating).toFixed(1)}
+                </span>
+              </>
+            ) : (
+              <span style={{ fontSize: '0.78rem', color: '#888' }}>Belum ada ulasan</span>
+            )}
           </div>
           <span>•</span>
-          <span>{product.soldCount || 100}+ terjual</span>
+          <span>{product.soldCount ?? 0} terjual</span>
         </div>
 
         {/* Title */}

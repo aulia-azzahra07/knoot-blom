@@ -12,8 +12,13 @@ export default function ShopPage({
   searchQuery,
   setSearchQuery
 }) {
+  const PRICE_MIN_LIMIT = 10000;
+  const PRICE_MAX_LIMIT = 50000;
+  const PRICE_STEP = 5000;
+
   const [selectedCategory, setSelectedCategory] = useState(initialCategory || 'all');
-  const [selectedPriceRange, setSelectedPriceRange] = useState('all');
+  const [minPrice, setMinPrice] = useState(PRICE_MIN_LIMIT);
+  const [maxPrice, setMaxPrice] = useState(PRICE_MAX_LIMIT);
   const [selectedTag, setSelectedTag] = useState('all');
   const [sortBy, setSortBy] = useState('popular');
   const [currentPage, setCurrentPage] = useState(1);
@@ -22,17 +27,15 @@ export default function ShopPage({
   // Filter categories list
   const categoryFilters = [
     { id: 'all', label: 'Semua Kategori' },
+    { id: 'amigurumi', label: 'Amigurumi' },
     { id: 'tas-rajut', label: 'Tas Rajut' },
-    { id: 'aksesoris', label: 'Aksesoris' }
+    { id: 'aksesoris', label: 'Aksesoris' },
+    { id: 'diy-kit', label: 'DIY Kit' },
+    { id: 'alat-benang', label: 'Alat & Benang' }
   ];
 
-  const priceFilters = [
-    { id: 'all', label: 'Semua Harga' },
-    { id: 'under-50', label: '< Rp 50.000' },
-    { id: '50-100', label: 'Rp 50.000 - 100.000' },
-    { id: '100-200', label: 'Rp 100.000 - 200.000' },
-    { id: 'above-200', label: '> Rp 200.000' }
-  ];
+  const isPriceFiltered = minPrice > PRICE_MIN_LIMIT || maxPrice < PRICE_MAX_LIMIT;
+  const formatRupiah = (val) => 'Rp ' + Number(val || 0).toLocaleString('id-ID');
 
   const tagFilters = [
     { id: 'all', label: 'Semua Tanda' },
@@ -47,8 +50,8 @@ export default function ShopPage({
       // 1. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchTitle = prod.name.toLowerCase().includes(q);
-        const matchDesc = prod.description.toLowerCase().includes(q);
+        const matchTitle = (prod.name || '').toLowerCase().includes(q);
+        const matchDesc = (prod.description || '').toLowerCase().includes(q);
         if (!matchTitle && !matchDesc) return false;
       }
 
@@ -57,11 +60,9 @@ export default function ShopPage({
         return false;
       }
 
-      // 3. Price
-      if (selectedPriceRange === 'under-50' && prod.price >= 50000) return false;
-      if (selectedPriceRange === '50-100' && (prod.price < 50000 || prod.price > 100000)) return false;
-      if (selectedPriceRange === '100-200' && (prod.price < 100000 || prod.price > 200000)) return false;
-      if (selectedPriceRange === 'above-200' && prod.price <= 200000) return false;
+      // 3. Price (selalu gunakan harga real dari database Supabase)
+      const dbPrice = Number(prod.price) || 0;
+      if (dbPrice < minPrice || dbPrice > maxPrice) return false;
 
       // 4. Tag
       if (selectedTag !== 'all' && prod.tagType !== selectedTag) {
@@ -70,13 +71,13 @@ export default function ShopPage({
 
       return true;
     }).sort((a, b) => {
-      if (sortBy === 'price-low') return a.price - b.price;
-      if (sortBy === 'price-high') return b.price - a.price;
-      if (sortBy === 'rating') return b.rating - a.rating;
+      if (sortBy === 'price-low') return (Number(a.price) || 0) - (Number(b.price) || 0);
+      if (sortBy === 'price-high') return (Number(b.price) || 0) - (Number(a.price) || 0);
+      if (sortBy === 'rating') return (Number(b.rating) || 0) - (Number(a.rating) || 0);
       if (sortBy === 'sold') return (b.soldCount || 0) - (a.soldCount || 0);
       return (b.soldCount || 0) - (a.soldCount || 0); // default popular
     });
-  }, [products, searchQuery, selectedCategory, selectedPriceRange, selectedTag, sortBy]);
+  }, [products, searchQuery, selectedCategory, minPrice, maxPrice, selectedTag, sortBy]);
 
   // Pagination
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage) || 1;
@@ -87,7 +88,8 @@ export default function ShopPage({
 
   const resetFilters = () => {
     setSelectedCategory('all');
-    setSelectedPriceRange('all');
+    setMinPrice(PRICE_MIN_LIMIT);
+    setMaxPrice(PRICE_MAX_LIMIT);
     setSelectedTag('all');
     setSearchQuery('');
     setSortBy('popular');
@@ -148,7 +150,7 @@ export default function ShopPage({
           <div className="sidebar-box">
             <div className="sidebar-head">
               <h3>Filter Produk</h3>
-              {(selectedCategory !== 'all' || selectedPriceRange !== 'all' || selectedTag !== 'all' || searchQuery) && (
+              {(selectedCategory !== 'all' || isPriceFiltered || selectedTag !== 'all' || searchQuery) && (
                 <button className="reset-filter-btn" onClick={resetFilters}>
                   Reset
                 </button>
@@ -178,27 +180,56 @@ export default function ShopPage({
               </ul>
             </div>
 
-            {/* Filter: Harga */}
+            {/* Filter: Harga (Rp 10.000 - Rp 50.000, step Rp 5.000) */}
             <div className="filter-group">
-              <h4 className="filter-title">Harga</h4>
-              <ul className="filter-list">
-                {priceFilters.map((pr) => (
-                  <li key={pr.id}>
-                    <label className="filter-label">
-                      <input
-                        type="radio"
-                        name="priceRange"
-                        checked={selectedPriceRange === pr.id}
-                        onChange={() => {
-                          setSelectedPriceRange(pr.id);
-                          setCurrentPage(1);
-                        }}
-                      />
-                      <span>{pr.label}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
+              <h4 className="filter-title">Rentang Harga</h4>
+              <div className="price-range-filter-box">
+                <div className="price-range-values">
+                  <span>{formatRupiah(minPrice)}</span>
+                  <span>–</span>
+                  <span>{formatRupiah(maxPrice)}</span>
+                </div>
+
+                <label className="price-slider-label">
+                  <span>Minimum: <strong>{formatRupiah(minPrice)}</strong></span>
+                  <input
+                    type="range"
+                    className="price-range-slider"
+                    min={PRICE_MIN_LIMIT}
+                    max={PRICE_MAX_LIMIT}
+                    step={PRICE_STEP}
+                    value={minPrice}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setMinPrice(Math.min(val, maxPrice));
+                      setCurrentPage(1);
+                    }}
+                  />
+                </label>
+
+                <label className="price-slider-label">
+                  <span>Maksimum: <strong>{formatRupiah(maxPrice)}</strong></span>
+                  <input
+                    type="range"
+                    className="price-range-slider"
+                    min={PRICE_MIN_LIMIT}
+                    max={PRICE_MAX_LIMIT}
+                    step={PRICE_STEP}
+                    value={maxPrice}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setMaxPrice(Math.max(val, minPrice));
+                      setCurrentPage(1);
+                    }}
+                  />
+                </label>
+
+                <div className="price-range-scale">
+                  <span>Rp 10rb</span>
+                  <span>Rp 30rb</span>
+                  <span>Rp 50rb</span>
+                </div>
+              </div>
             </div>
 
             {/* Filter: Tanda */}

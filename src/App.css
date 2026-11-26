@@ -169,35 +169,6 @@
   background-color: var(--color-pink-light);
 }
 
-.btn-navbar-login {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 9px 16px;
-  background-color: #FAF4EE;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  font-size: 0.88rem;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.btn-navbar-login svg {
-  flex-shrink: 0;
-}
-
-.btn-navbar-login:hover {
-  border-color: var(--color-pink);
-  background-color: var(--color-pink-light);
-  color: var(--color-pink);
-}
-
 .user-avatar-mini {
   width: 32px;
   height: 32px;
@@ -458,7 +429,7 @@
 
 .categories-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 16px;
 }
 
@@ -579,17 +550,17 @@
 
 .promo-banners-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
 }
 
 .promo-banner-box {
   border-radius: var(--radius-xl);
-  padding: 28px 36px;
+  padding: 36px;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1.2fr 0.8fr;
   align-items: center;
-  gap: 32px;
+  gap: 20px;
   box-shadow: var(--shadow-sm);
   border: 1px solid transparent;
   transition: var(--transition);
@@ -664,13 +635,11 @@
 }
 
 .promo-banner-img {
-  width: 220px;
-  max-width: 100%;
+  width: 100%;
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  flex-shrink: 0;
 }
 
 .promo-banner-img img {
@@ -5793,8 +5762,7 @@
     display: none;
   }
 
-  .user-pill-btn,
-  .btn-navbar-login {
+  .user-pill-btn {
     display: none;
   }
 
@@ -5812,18 +5780,6 @@
 
   .promo-banners-grid {
     grid-template-columns: 1fr;
-  }
-
-  .promo-banner-box {
-    grid-template-columns: 1fr;
-    padding: 24px;
-    gap: 20px;
-  }
-
-  .promo-banner-img {
-    width: 100%;
-    max-width: 220px;
-    margin: 0 auto;
   }
 
   .story-testimonial-grid {
@@ -9951,4 +9907,209 @@
 @keyframes toastOut {
   from { opacity: 1; transform: translateY(0)   scale(1); }
   to   { opacity: 0; transform: translateY(10px) scale(0.95); }
+}
+
+
+/* ── FILTER HARGA RENTANG (SHOP PAGE) ────────────────────────────────── */
+.price-range-filter-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 2px;
+}
+
+.price-range-values {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFF1F8;
+  border: 1px solid #FFD6EC;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #E63985;
+}
+
+.price-slider-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.price-range-slider {
+  width: 100%;
+  accent-color: #FF86C1;
+  cursor: pointer;
+}
+
+.price-range-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: #888;
+}
+
+/* ── FORM ULASAN DI DETAIL TRACKING (PESANAN SELESAI) ────────────────── */
+.order-review-section {
+  background: #FFFFFF;
+  border: 1.5px solid #FFE1EE;
+  border-radius: 18px;
+  padding: 20px;
+  margin-top: 20px;
+  box-shadow: 0 4px 16px rgba(255, 134, 193, 0.08);
+}
+
+.order-review-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.review-item-form-card {
+  border: 1px solid #F3E4EC;
+  border-radius: 14px;
+  padding: 14px;
+  background: #FFFBFD;
+}
+
+.review-item-form-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.review-item-form-head h6 {
+  margin: 0 0 2px;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.review-item-form-head span {
+  font-size: 0.82rem;
+  color: #777;
+}
+
+.order-review-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.star-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+  color: #555;
+}
+
+.star-rating-val {
+  font-weight: 600;
+  color: #E63985;
+  margin-left: 4px;
+}
+
+.order-review-textarea {
+  width: 100%;
+  border: 1.5px solid #F3D1E1;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  outline: none;
+}
+
+.order-review-textarea:focus {
+  border-color: #FF86C1;
+}
+
+.review-submitted-box {
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.review-submitted-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #065F46;
+  margin-bottom: 4px;
+}
+
+.submitted-stars-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.review-submitted-comment {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #374151;
+  font-style: italic;
+}
+
+/* ── TOMBOL CHAT PEMBELI DI WEB & BANNER KONTEKS PESANAN ADMIN ───────── */
+.btn-chat-web-admin {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.btn-chat-web-admin:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+.admin-attached-order-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #FFF1F8;
+  border-bottom: 1px solid #FFD6EC;
+}
+
+.admin-attached-order-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.86rem;
+  color: #484F4F;
+}
+
+.admin-attached-order-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-attached-order-close {
+  background: transparent;
+  border: none;
+  color: #9D174D;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-attached-order-close:hover {
+  background: rgba(230, 57, 133, 0.12);
 }

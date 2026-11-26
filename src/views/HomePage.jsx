@@ -1,10 +1,11 @@
 import React from 'react';
-import { ArrowRight, Sparkles, Heart, Package, Smile, ShoppingBag, Scissors, Star, CheckCircle } from 'lucide-react';
+import { ArrowRight, Sparkles, Heart, Package, Smile, ShoppingBag, Scissors, Star, User } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
-import { CATEGORIES, TESTIMONIALS } from '../data/products';
+import { CATEGORIES } from '../data/products';
 
 export default function HomePage({
   products,
+  reviews = [],
   onSelectProduct,
   onAddToCart,
   wishlist,
@@ -13,8 +14,21 @@ export default function HomePage({
   onOpenCustomOrder,
   onOpenCustomKit
 }) {
-  // Best sellers for hero section
-  const bestSellers = products.slice(0, 4);
+  // Produk unggulan di Home — pastikan Keychain Bunga ikut tampil bersama produk lain
+  const bestSellers = (() => {
+    const top = products.slice(0, 5);
+    const keychainBunga = products.find(
+      (p) =>
+        (p.slug || '').toLowerCase() === 'keychain-bunga' ||
+        (p.name || '').toLowerCase().includes('keychain bunga')
+    );
+    if (keychainBunga && !top.some((p) => p.id === keychainBunga.id)) {
+      return [...top.slice(0, 4), keychainBunga];
+    }
+    return top;
+  })();
+
+  const latestReview = Array.isArray(reviews) && reviews.length > 0 ? reviews[0] : null;
 
   const getCategoryIcon = (iconName) => {
     switch (iconName) {
@@ -157,10 +171,31 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* 4. FEATURE PROMO BANNER */}
+      {/* 4. DUAL FEATURE PROMO BANNERS */}
       <section className="promo-banners-section container">
         <div className="promo-banners-grid">
-          {/* Buat Pesanan Custom Sendiri */}
+          {/* Card 1: Mulai Petualangan Merajutmu */}
+          <div className="promo-banner-box banner-diy">
+            <div className="promo-text-content">
+              <span className="promo-tag">Pemula & Hobi Baru</span>
+              <h3 className="promo-title">Mulai Petualangan Merajutmu!</h3>
+              <p className="promo-desc">
+                Dapatkan DIY kit lengkap + panduan video untuk pemula. Yuk, bikin karya sendiri!
+              </p>
+              <button
+                className="promo-btn btn-diy-link"
+                onClick={() => onNavigate('diy-kit')}
+              >
+                <span>Lihat DIY Kit</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+            <div className="promo-banner-img">
+              <img src="/images/diy-crochet-kit.jpg" alt="DIY Kit" />
+            </div>
+          </div>
+
+          {/* Card 2: Buat Pesanan Custom Sendiri */}
           <div className="promo-banner-box banner-custom">
             <div className="promo-text-content">
               <span className="promo-tag">Kado & Koleksi Personal</span>
@@ -210,35 +245,49 @@ export default function HomePage({
             </div>
           </div>
 
-          {/* Testimoni */}
+          {/* Testimoni (Real dari tabel `reviews` di Supabase) */}
           <div className="testimonial-box-card">
             <div className="testi-header">
               <span className="story-eyebrow">Apa Kata Mereka</span>
               <h3 className="story-title">Testimoni</h3>
             </div>
-            <div className="testi-content">
-              <div className="testi-stars">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={18} fill="#FFB703" strokeWidth={0} />
-                ))}
-              </div>
-              <blockquote className="testi-quote">
-                "{TESTIMONIALS[0].comment}"
-              </blockquote>
-              <div className="testi-author-row">
-                <img
-                  src={TESTIMONIALS[0].avatar}
-                  alt={TESTIMONIALS[0].name}
-                  className="testi-avatar"
-                />
-                <div>
-                  <div className="testi-name">
-                    <strong>{TESTIMONIALS[0].name}</strong>, {TESTIMONIALS[0].location}
+            {latestReview ? (
+              <div className="testi-content">
+                <div className="testi-stars">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      size={18}
+                      fill={i < (Number(latestReview.rating) || 0) ? '#FFB703' : 'none'}
+                      color="#FFB703"
+                      strokeWidth={i < (Number(latestReview.rating) || 0) ? 0 : 1.5}
+                    />
+                  ))}
+                </div>
+                <blockquote className="testi-quote">
+                  "{latestReview.comment}"
+                </blockquote>
+                <div className="testi-author-row">
+                  <div className="testi-avatar icon-avatar-circle" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFE4EE' }}>
+                    <User size={20} color="#E63985" />
                   </div>
-                  <span className="testi-prod-name">Membeli: {TESTIMONIALS[0].product}</span>
+                  <div>
+                    <div className="testi-name">
+                      <strong>{latestReview.customer_name || 'Pelanggan'}</strong>
+                    </div>
+                    {latestReview.product_name && (
+                      <span className="testi-prod-name">Membeli: {latestReview.product_name}</span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="testi-content" style={{ padding: '24px 0', textAlign: 'center', color: '#888' }}>
+                <p style={{ margin: 0, fontSize: '0.95rem' }}>
+                  Belum ada ulasan, jadilah yang pertama!
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </section>

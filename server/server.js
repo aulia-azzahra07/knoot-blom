@@ -309,13 +309,59 @@ app.post("/api/create-transaction", async (req, res) => {
             user_id
         } = req.body;
 
-        const effectiveTotal = Number(total || grossAmount);
         const effectiveName = customerName || firstName || "Customer";
         const effectivePhone = phone || "08123456789";
         const effectiveAddress = address || "Alamat Belum Diisi";
         const effectiveUserId = userId || user_id || null;
 
-        if (!Number.isInteger(effectiveTotal) || effectiveTotal <= 0) {
+        // Verifikasi harga produk non-custom langsung dari tabel `products` di Supabase
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        let dbProductsById = {};
+        if (Array.isArray(cartItems) && cartItems.length > 0) {
+            const validProductIds = [
+                ...new Set(
+                    cartItems
+                        .map((item) => item.id || item.productId)
+                        .filter((id) => typeof id === "string" && uuidRegex.test(id))
+                )
+            ];
+            if (validProductIds.length > 0) {
+                const { data: dbProducts, error: dbProdErr } = await supabase
+                    .from("products")
+                    .select("id, name, price")
+                    .in("id", validProductIds);
+                if (!dbProdErr && Array.isArray(dbProducts)) {
+                    dbProductsById = Object.fromEntries(dbProducts.map((p) => [p.id, p]));
+                }
+            }
+        }
+
+        const verifiedCartItems = Array.isArray(cartItems)
+            ? cartItems.map((item) => {
+                  const rawId = item.id || item.productId;
+                  const dbProd = typeof rawId === "string" ? dbProductsById[rawId] : null;
+                  const itemPrice = dbProd ? Number(dbProd.price) : (Number(item.price) || 0);
+                  const itemQty = Number(item.quantity) || 1;
+                  return {
+                      ...item,
+                      name: dbProd ? dbProd.name : (item.name || item.productName || "Produk Rajut"),
+                      price: itemPrice,
+                      quantity: itemQty
+                  };
+              })
+            : [];
+
+        const effectiveSubtotal = verifiedCartItems.length > 0
+            ? verifiedCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+            : (subtotal ? Number(subtotal) : (Number(total || grossAmount) - (shippingCost ? Number(shippingCost) : 0)));
+        const effectiveShipping = verifiedCartItems.length > 0
+            ? (effectiveSubtotal >= 50000 ? 0 : 5000)
+            : (shippingCost ? Number(shippingCost) : 0);
+        const effectiveTotal = verifiedCartItems.length > 0
+            ? effectiveSubtotal + effectiveShipping
+            : Number(total || grossAmount);
+
+        if (!Number.isFinite(effectiveTotal) || effectiveTotal <= 0) {
             return res.status(400).json({
                 message: "Nominal pemesanan tidak valid",
             });
@@ -326,9 +372,6 @@ app.post("/api/create-transaction", async (req, res) => {
 
         // 1. Simpan data order ke tabel Supabase 'orders'
         // Status otomatis langsung "Dikemas" & status_bayar "belum_dibayar"
-        const effectiveSubtotal = subtotal ? Number(subtotal) : (effectiveTotal - (shippingCost ? Number(shippingCost) : 0));
-        const effectiveShipping = shippingCost ? Number(shippingCost) : 0;
-
         const { data: orderData, error: orderError } = await supabase
             .from("orders")
             .insert({
@@ -352,10 +395,9 @@ app.post("/api/create-transaction", async (req, res) => {
             throw orderError;
         }
 
-        // 2. Simpan rincian barang ke tabel 'order_items'
-        if (Array.isArray(cartItems) && cartItems.length > 0) {
-            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            const orderItemsPayload = cartItems.map((item) => {
+        // 2. Simpan rincian barang ke tabel 'order_items' (memakai harga terverifikasi dari DB)
+        if (verifiedCartItems.length > 0) {
+            const orderItemsPayload = verifiedCartItems.map((item) => {
                 const itemQty = Number(item.quantity) || 1;
                 const itemPrice = Number(item.price) || 0;
                 const rawId = item.id || item.productId;
@@ -411,6 +453,9 @@ app.post("/api/create-transaction", async (req, res) => {
             isCash: true,
             orderId: orderData.id,
             orderNumber: orderNumber,
+            subtotal: effectiveSubtotal,
+            shippingCost: effectiveShipping,
+            total: effectiveTotal,
             status: "Dikemas",
             status_bayar: "belum_dibayar",
             message: "Pesanan berhasil dibuat dan otomatis berstatus Dikemas (Metode: Tunai saat tiba)!"

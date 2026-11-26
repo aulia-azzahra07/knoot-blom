@@ -10,7 +10,8 @@ import {
   Package,
   RefreshCw,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  X
 } from 'lucide-react';
 import {
   getAdminConversations,
@@ -26,10 +27,18 @@ export default function AdminCustomerChat({
   currentUser,
   orders = [],
   showToast = null,
-  onViewOrder = null
+  onViewOrder = null,
+  initialConversation = null,
+  targetCustomerId = null,
+  attachedOrder = null,
+  chatRequestKey = 0,
+  onClearAttachedOrder = null
 }) {
-  const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [conversations, setConversations] = useState(
+    initialConversation ? [initialConversation] : []
+  );
+  const [selectedConversation, setSelectedConversation] = useState(initialConversation || null);
+  const [currentAttachedOrder, setCurrentAttachedOrder] = useState(attachedOrder || null);
   const [messages, setMessages] = useState([]);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,6 +49,35 @@ export default function AdminCustomerChat({
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const targetConvRef = useRef(initialConversation);
+  const targetCustomerIdRef = useRef(targetCustomerId);
+
+  targetConvRef.current = initialConversation;
+  targetCustomerIdRef.current = targetCustomerId;
+
+  // Sinkronkan percakapan & konteks pesanan saat admin klik "Chat Pembeli di Web" dari kartu pesanan
+  useEffect(() => {
+    if (initialConversation?.id) {
+      setSearchQuery('');
+      setConversations((prev) => {
+        const exists = prev.some((c) => c.id === initialConversation.id);
+        if (exists) {
+          return prev.map((c) => (c.id === initialConversation.id ? { ...c, ...initialConversation } : c));
+        }
+        return [initialConversation, ...prev];
+      });
+      setSelectedConversation(initialConversation);
+      setTimeout(() => {
+        if (inputRef.current) inputRef.current.focus();
+      }, 150);
+    }
+  }, [initialConversation, chatRequestKey]);
+
+  useEffect(() => {
+    if (attachedOrder) {
+      setCurrentAttachedOrder(attachedOrder);
+    }
+  }, [attachedOrder, chatRequestKey]);
 
   // Format jam / tanggal pesan
   const formatTime = (timestamp) => {
@@ -84,12 +122,31 @@ export default function AdminCustomerChat({
         getAdminConversations(),
         getAdminUnreadCountsByConversation()
       ]);
-      setConversations(convs);
+
+      // Pastikan percakapan target yang baru di-upsert tetap muncul di daftar kiri
+      const targetConv = targetConvRef.current;
+      const mergedConvs =
+        targetConv?.id && !convs.some((c) => c.id === targetConv.id)
+          ? [targetConv, ...convs]
+          : convs;
+
+      setConversations(mergedConvs);
       setUnreadCounts(counts);
 
-      // Otomatis pilih percakapan pertama jika belum ada yang dipilih
-      if (!selectedConversation && convs.length > 0) {
-        setSelectedConversation(convs[0]);
+      // Jika belum ada percakapan terpilih, prioritaskan targetCustomerId lalu percakapan pertama
+      if (mergedConvs.length > 0) {
+        setSelectedConversation((prev) => {
+          if (prev?.id) {
+            return mergedConvs.find((c) => c.id === prev.id) || prev;
+          }
+          if (targetCustomerIdRef.current) {
+            const byCustomer = mergedConvs.find(
+              (c) => c.customer_id === targetCustomerIdRef.current
+            );
+            if (byCustomer) return byCustomer;
+          }
+          return mergedConvs[0];
+        });
       }
     } catch (err) {
       console.error('[AdminCustomerChat] Gagal memuat percakapan:', err);
@@ -209,17 +266,23 @@ export default function AdminCustomerChat({
     setSending(true);
 
     try {
+      const orderIdToAttach = currentAttachedOrder?.id || null;
+
       const inserted = await sendChatMessage({
         conversationId: selectedConversation.id,
         senderId: currentUser?.id || 'admin-user',
         senderRole: 'admin',
         content: textToSend,
-        orderId: null
+        orderId: orderIdToAttach
       });
 
       if (inserted) {
         setMessages((prev) => mergeMessages(prev, inserted));
         setReplyText('');
+        if (currentAttachedOrder) {
+          setCurrentAttachedOrder(null);
+          if (onClearAttachedOrder) onClearAttachedOrder();
+        }
         // Update cuplikan last_message di daftar
         setConversations((prev) =>
           prev.map((c) =>
@@ -258,7 +321,11 @@ export default function AdminCustomerChat({
   // Cari informasi order jika pesan menyertakan order_id
   const getOrderInfo = (orderId) => {
     if (!orderId || !orders) return null;
-    return orders.find((o) => String(o.id) === String(orderId)) || null;
+    return (
+      orders.find(
+        (o) => String(o.id) === String(orderId) || String(o.dbId) === String(orderId)
+      ) || null
+    );
   };
 
   return (
@@ -374,6 +441,43 @@ export default function AdminCustomerChat({
                 <RefreshCw size={15} />
               </button>
             </div>
+
+            {/* Kartu Konteks Pesanan saat admin membuka chat dari kartu pesanan */}
+            {currentAttachedOrder && (
+              <div className="admin-attached-order-banner">
+                <div className="admin-attached-order-info">
+                  <Package size={16} color="#E63985" />
+                  <div className="admin-attached-order-meta">
+                    <span>
+                      Konteks Pesanan: <strong>#{currentAttachedOrder.id}</strong>
+                    </span>
+                    <span
+                      className={`order-status-chip ${
+                        currentAttachedOrder.status === 'Selesai' ? 'status-green' : 'status-pink'
+                      }`}
+                    >
+                      {currentAttachedOrder.status}
+                    </span>
+                    {currentAttachedOrder.total != null && (
+                      <span>
+                        Total: <strong>Rp {Number(currentAttachedOrder.total || 0).toLocaleString('id-ID')}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="admin-attached-order-close"
+                  onClick={() => {
+                    setCurrentAttachedOrder(null);
+                    if (onClearAttachedOrder) onClearAttachedOrder();
+                  }}
+                  title="Tutup konteks pesanan"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
 
             {/* Area Pesan Chat */}
             <div className="admin-chat-messages-flow">

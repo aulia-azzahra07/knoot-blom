@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, MessageCircle, Send, ShieldCheck, RefreshCw, Sparkles, MapPin } from 'lucide-react';
+import { Heart, ShieldCheck, RefreshCw, Sparkles, MapPin } from 'lucide-react';
 
 export default function Footer({ setCurrentView }) {
   const handleNavClick = (viewId) => {
@@ -20,40 +20,20 @@ export default function Footer({ setCurrentView }) {
         <div className="container">
           {/* Social Follow Banner from Mockup */}
           <div className="footer-social-banner">
-            <span className="social-banner-tag">Follow us @knotandbloom</span>
+            <span className="social-banner-tag">Follow us @knittycraft_</span>
             <div className="social-icons-row">
               <a
-                href="https://instagram.com"
+                href="https://www.instagram.com/knittycraft_?utm_source=ig_web_button_share_sheet&hvrq=ZDNlZDc0MzIxNw=="
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="social-btn"
-                title="Instagram @knotandbloom"
+                title="Instagram @knittycraft_"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect width="20" height="20" x="2" y="2" rx="5" ry="5"/>
                   <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
                   <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>
                 </svg>
-              </a>
-              <a
-                href="https://tiktok.com"
-                target="_blank"
-                rel="noreferrer"
-                className="social-btn"
-                title="TikTok @knotandbloom"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.49 6.27 6.27 0 0 0 1.84-4.48V8.78a8.28 8.28 0 0 0 3.93 1.37V6.69z"/>
-                </svg>
-              </a>
-              <a
-                href="https://wa.me/628123456789"
-                target="_blank"
-                rel="noreferrer"
-                className="social-btn"
-                title="WhatsApp Knitty Craft"
-              >
-                <MessageCircle size={22} />
               </a>
             </div>
             <div className="footer-tagline-quote">
@@ -88,6 +68,8 @@ export default function Footer({ setCurrentView }) {
               <ul className="footer-links">
                 <li><button onClick={() => handleNavClick('home')}>Beranda</button></li>
                 <li><button onClick={() => handleNavClick('shop')}>Semua Katalog</button></li>
+                <li><button onClick={() => handleNavClick('diy-kit')}>Paket DIY Kit</button></li>
+                <li><button onClick={() => handleNavClick('blog')}>Blog & Tips Rajut</button></li>
                 <li><button onClick={() => handleNavClick('about')}>Tentang & Proposal Kami</button></li>
               </ul>
             </div>

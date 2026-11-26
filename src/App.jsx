@@ -10,15 +10,17 @@ import GiftChatbot from './components/GiftChatbot';
 import HomePage from './views/HomePage';
 import ShopPage from './views/ShopPage';
 import ProductDetailPage from './views/ProductDetailPage';
+import DiyKitPage from './views/DiyKitPage';
 import CheckoutPage from './views/CheckoutPage';
 import MyAccountPage from './views/MyAccountPage';
 import AboutPage from './views/AboutPage';
+import BlogPage from './views/BlogPage';
 import AdminPortalPage from './views/AdminPortalPage';
 import LoginPage from './views/LoginPage';
 
-import { PRODUCTS } from './data/products';
 import { fetchProducts } from './services/productService';
 import { fetchOrders, updateOrderStatusOnServer, subscribeToOrders } from './services/orderService';
+import { fetchAllReviews } from './services/reviewService';
 import { supabase } from './lib/supabase';
 import { getCurrentUserWithRole, logoutUser } from './services/authService';
 import { Heart, CheckCircle2, Sparkles, Shield } from 'lucide-react';
@@ -74,25 +76,25 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── PRODUK ───────────────────────────────────────────────────────────
-  const [products, setProducts] = useState(() => {
-    try {
-      const saved = localStorage.getItem('kb_products');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return PRODUCTS;
-  });
+  // ── PRODUK & ULASAN (Satu sumber saja: Supabase) ──────────────────────
+  const [products, setProducts] = useState([]);
+  const [reviews, setReviews] = useState([]);
+
+  const refreshProductsAndReviews = async () => {
+    const [loadedProducts, loadedReviews] = await Promise.all([
+      fetchProducts(),
+      fetchAllReviews(10)
+    ]);
+    if (Array.isArray(loadedProducts)) setProducts(loadedProducts);
+    if (Array.isArray(loadedReviews)) setReviews(loadedReviews);
+  };
 
   useEffect(() => {
     let isMounted = true;
-    fetchProducts().then((loaded) => {
-      if (isMounted && Array.isArray(loaded) && loaded.length > 0) {
-        setProducts(loaded);
-        try { localStorage.setItem('kb_products', JSON.stringify(loaded)); } catch {}
-      }
+    Promise.all([fetchProducts(), fetchAllReviews(10)]).then(([loadedProducts, loadedReviews]) => {
+      if (!isMounted) return;
+      if (Array.isArray(loadedProducts)) setProducts(loadedProducts);
+      if (Array.isArray(loadedReviews)) setReviews(loadedReviews);
     });
     return () => { isMounted = false; };
   }, []);
@@ -145,18 +147,55 @@ export default function App() {
   // ── NAVIGASI ─────────────────────────────────────────────────────────
   const [currentView, setCurrentView] = useState(() => {
     try {
+      if (window.location.pathname === '/lacak-pesanan') return 'account';
       const savedRole = localStorage.getItem('kb_role');
       if (savedRole === 'admin') return 'admin';
     } catch {}
     return 'home';
   });
-  const [selectedProduct, setSelectedProduct] = useState(products[0] || PRODUCTS[0]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+
+  // Dengarkan tombol Back/Forward browser untuk route /lacak-pesanan
+  useEffect(() => {
+    const handlePopState = () => {
+      if (window.location.pathname === '/lacak-pesanan') {
+        setCurrentView('account');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     if (products.length > 0) {
       setSelectedProduct((prev) => {
         if (!prev) return products[0];
         return products.find((p) => p.id === prev.id || p.slug === prev.slug) || products[0];
+      });
+
+      // Sinkronkan harga & gambar item non-custom di keranjang dengan data terbaru dari tabel `products` Supabase
+      setCartItems((prev) => {
+        if (!Array.isArray(prev) || prev.length === 0) return prev;
+        let changed = false;
+        const synced = prev.map((item) => {
+          if (item.isCustom || item.isCustomKit) return item;
+          const dbProd = products.find((p) => p.id === item.id || (item.slug && p.slug === item.slug));
+          if (!dbProd) return item;
+          const dbPrice = Number(dbProd.price) || 0;
+          const nextImage = item.image && item.image.startsWith('http') ? item.image : dbProd.image;
+          if (item.price !== dbPrice || item.name !== dbProd.name || item.image !== nextImage) {
+            changed = true;
+            return {
+              ...item,
+              name: dbProd.name,
+              price: dbPrice,
+              originalPrice: dbProd.originalPrice,
+              image: nextImage || dbProd.image
+            };
+          }
+          return item;
+        });
+        return changed ? synced : prev;
       });
     }
   }, [products]);
@@ -166,11 +205,26 @@ export default function App() {
 
   // ── PROTEKSI HALAMAN ─────────────────────────────────────────────────
   // Halaman yang butuh login
-  const PROTECTED_VIEWS = ['checkout', 'account', 'account-wishlist'];
+  const PROTECTED_VIEWS = ['checkout', 'account', 'account-wishlist', 'account-chat'];
   const ADMIN_ONLY_VIEWS = ['admin'];
 
   useEffect(() => {
     if (authLoading) return; // tunggu auth selesai dicek
+
+    // Admin yang membuka /lacak-pesanan atau halaman Lacak Pesanan diarahkan ke Panel Admin
+    if (
+      currentUser?.role === 'admin' &&
+      (currentView === 'account' || window.location.pathname === '/lacak-pesanan')
+    ) {
+      setCurrentRole('admin');
+      try { localStorage.setItem('kb_role', 'admin'); } catch {}
+      setCurrentView('admin');
+      if (window.location.pathname === '/lacak-pesanan') {
+        window.history.replaceState({}, '', '/');
+      }
+      showToast('👑 Halaman Lacak Pesanan hanya untuk pembeli. Dialihkan ke Panel Admin.');
+      return;
+    }
 
     if (PROTECTED_VIEWS.includes(currentView) && !currentUser) {
       showToast('⚠️ Silakan login terlebih dahulu untuk mengakses halaman ini.');
@@ -180,7 +234,19 @@ export default function App() {
     if (ADMIN_ONLY_VIEWS.includes(currentView) && currentUser?.role !== 'admin') {
       showToast('⛔ Halaman Admin hanya untuk Admin Toko.');
       setCurrentView('home');
+      return;
     }
+
+    // Sinkronkan URL /lacak-pesanan khusus untuk customer
+    try {
+      if (currentView === 'account' && currentUser?.role !== 'admin') {
+        if (window.location.pathname !== '/lacak-pesanan') {
+          window.history.replaceState({}, '', '/lacak-pesanan');
+        }
+      } else if (window.location.pathname === '/lacak-pesanan') {
+        window.history.replaceState({}, '', '/');
+      }
+    } catch {}
   }, [currentView, currentUser, authLoading]);
 
   // ── KERANJANG ─────────────────────────────────────────────────────────
@@ -374,6 +440,13 @@ export default function App() {
     // 2. Sinkronkan perubahan status ke database Supabase
     await updateOrderStatusOnServer(orderId, newStatus, trackingNumber, courier, alasanBatal);
 
+    // 3. Jika pesanan menjadi Selesai, segarkan data produk agar angka "terjual" ikut ter-update otomatis
+    if (newStatus === 'Selesai') {
+      fetchProducts().then((loaded) => {
+        if (Array.isArray(loaded)) setProducts(loaded);
+      });
+    }
+
     showToast(`Status pesanan #${orderId} berhasil diubah ke "${newStatus}"!`);
   };
 
@@ -412,33 +485,51 @@ export default function App() {
     }
   };
 
-  // Add to Cart
+  // Add to Cart (selalu gunakan harga terbaru dari tabel `products` Supabase untuk produk katalog)
   const handleAddToCart = (product) => {
     const qtyToAdd = product.quantity || 1;
     const colorName = product.selectedColor?.name || 'Default';
+    const isCustom = Boolean(product.isCustom || product.isCustomKit);
+    const dbProduct = !isCustom
+      ? products.find((p) => p.id === product.id || (product.slug && p.slug === product.slug))
+      : null;
+    const authoritativePrice = dbProduct ? Number(dbProduct.price) : (Number(product.price) || 0);
+    const authoritativeProduct = dbProduct
+      ? {
+          ...product,
+          name: dbProduct.name,
+          price: authoritativePrice,
+          originalPrice: dbProduct.originalPrice,
+          image: product.image || dbProduct.image
+        }
+      : { ...product, price: authoritativePrice };
 
     setCartItems((prev) => {
       const existingIdx = prev.findIndex(
-        (item) => item.id === product.id && (item.selectedColor?.name || 'Default') === colorName
+        (item) => item.id === authoritativeProduct.id && (item.selectedColor?.name || 'Default') === colorName
       );
 
       if (existingIdx > -1) {
         const updated = [...prev];
-        updated[existingIdx].quantity += qtyToAdd;
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          price: authoritativePrice,
+          quantity: updated[existingIdx].quantity + qtyToAdd
+        };
         return updated;
       } else {
         return [
           ...prev,
           {
-            ...product,
+            ...authoritativeProduct,
             quantity: qtyToAdd,
-            selectedColor: product.selectedColor || (product.colors ? product.colors[0] : null)
+            selectedColor: authoritativeProduct.selectedColor || (authoritativeProduct.colors ? authoritativeProduct.colors[0] : null)
           }
         ];
       }
     });
 
-    showToast(`"${product.name}" berhasil dimasukkan ke keranjang belanja! ♡`);
+    showToast(`"${authoritativeProduct.name}" berhasil dimasukkan ke keranjang belanja! ♡`);
   };
 
   // Update Cart Quantity
@@ -567,6 +658,7 @@ export default function App() {
         {currentView === 'home' && (
           <HomePage
             products={products}
+            reviews={reviews}
             onSelectProduct={handleSelectProduct}
             onAddToCart={handleAddToCart}
             wishlist={wishlist}
@@ -603,9 +695,21 @@ export default function App() {
           />
         )}
 
+        {currentView === 'diy-kit' && (
+          <DiyKitPage
+            products={products}
+            onSelectProduct={handleSelectProduct}
+            onAddToCart={handleAddToCart}
+            wishlist={wishlist}
+            onToggleWishlist={handleToggleWishlist}
+            onOpenCustomKit={() => setIsCustomKitOpen(true)}
+          />
+        )}
+
         {currentView === 'checkout' && currentUser && (
           <CheckoutPage
             cartItems={cartItems}
+            products={products}
             onBackToCart={() => {
               if (cartItems.length > 0) setIsCartOpen(true);
               setCurrentView('shop');
@@ -641,11 +745,19 @@ export default function App() {
             }}
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onNavigate={handleNavigate}
+            onReviewSubmitted={refreshProductsAndReviews}
           />
         )}
 
         {currentView === 'about' && (
           <AboutPage onNavigate={handleNavigate} />
+        )}
+
+        {currentView === 'blog' && (
+          <BlogPage
+            onNavigate={handleNavigate}
+            onOpenCustomKit={() => setIsCustomKitOpen(true)}
+          />
         )}
       </main>
 
@@ -668,6 +780,7 @@ export default function App() {
             isOpen={isCartOpen}
             onClose={() => setIsCartOpen(false)}
             cartItems={cartItems}
+            products={products}
             onUpdateQuantity={handleUpdateQuantity}
             onRemoveItem={handleRemoveFromCart}
             onProceedToCheckout={() => {

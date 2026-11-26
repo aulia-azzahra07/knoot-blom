@@ -15,6 +15,8 @@ import {
   Check
 } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
+import { getSafeProductImage, handleProductImageError } from '../utils/productImage';
+import { fetchReviewsByProduct } from '../services/reviewService';
 
 export default function ProductDetailPage({
   product,
@@ -59,28 +61,7 @@ export default function ProductDetailPage({
       }
     }
 
-    // 4. Fallback cerdas untuk produk Keychain Pita & Bintang dari Supabase storage
-    const pName = (prod.name || '').toLowerCase();
-    if (pName.includes('pita')) {
-      if (colName.includes('biru')) {
-        return 'https://izukypsdyhxvixeynjzb.supabase.co/storage/v1/object/public/product-images/keychain%20pita%20biru.png';
-      }
-      if (colName.includes('putih')) {
-        return 'https://izukypsdyhxvixeynjzb.supabase.co/storage/v1/object/public/product-images/keychain%20pita%20putih.png';
-      }
-      if (colName.includes('kuning')) {
-        return 'https://izukypsdyhxvixeynjzb.supabase.co/storage/v1/object/public/product-images/keychain%20pita%20kuning.png';
-      }
-    } else if (pName.includes('bintang')) {
-      if (colName.includes('kuning')) {
-        return 'https://izukypsdyhxvixeynjzb.supabase.co/storage/v1/object/public/product-images/keychain%20bintang.png';
-      }
-      if (colName.includes('pink')) {
-        return 'https://izukypsdyhxvixeynjzb.supabase.co/storage/v1/object/public/product-images/hairdband%20pink.png';
-      }
-    }
-
-    return prod.image;
+    return prod.image || prod.images?.[0] || '';
   };
 
   const initialColor = product.colors && product.colors.length > 0 ? product.colors[0] : null;
@@ -124,59 +105,55 @@ export default function ProductDetailPage({
     }
   };
 
-  // Customer Reviews state
-  const [reviewsList, setReviewsList] = useState([
-    {
-      id: 1,
-      author: 'Putri Ramadhani',
-      rating: 5,
-      date: '28 Okt 2026',
-      comment: 'MasyaAllah cantik banget! Jahitannya rapi banget, benangnya halus nggak gampang brudul. Pengemasan pakai kardus estetik dan ada kartu ucapan.',
-      variant: selectedColor?.name || 'Soft Pink'
-    },
-    {
-      id: 2,
-      author: 'Dinda Kirana',
-      rating: 5,
-      date: '22 Okt 2026',
-      comment: 'Barangnya persis sama di foto. Cocok banget buat gantungan tas kuliah. Pengiriman dari Palembang ke Jakarta aman dan cepat sampai!',
-      variant: 'Warm Peach'
-    },
-    {
-      id: 3,
-      author: 'Rina Salsabila',
-      rating: 4,
-      date: '15 Okt 2026',
-      comment: 'Lucu bangettt, respon admin cepat dan ramah pas minta custom warna. Recommended!',
-      variant: 'Lilac'
-    }
-  ]);
+  // Customer Reviews state (Real dari tabel `reviews` di Supabase)
+  const [reviewsList, setReviewsList] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
 
-  const [newReviewText, setNewReviewText] = useState('');
-  const [newReviewName, setNewReviewName] = useState('');
-  const [newReviewRating, setNewReviewRating] = useState(5);
+  React.useEffect(() => {
+    let isMounted = true;
+    if (!product?.id) {
+      setReviewsList([]);
+      setLoadingReviews(false);
+      return;
+    }
+    setLoadingReviews(true);
+    fetchReviewsByProduct(product.id).then((data) => {
+      if (isMounted) {
+        setReviewsList(Array.isArray(data) ? data : []);
+        setLoadingReviews(false);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [product?.id]);
+
+  const realReviewCount = reviewsList.length;
+  const realAvgRating =
+    realReviewCount > 0
+      ? Number(
+          (
+            reviewsList.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) /
+            realReviewCount
+          ).toFixed(1)
+        )
+      : null;
+
+  const formatReviewDate = (iso) => {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return '';
+    }
+  };
 
   const formatRupiah = (val) => {
     return 'Rp ' + Number(val).toLocaleString('id-ID');
-  };
-
-  const handleAddReview = (e) => {
-    e.preventDefault();
-    if (!newReviewText.trim()) return;
-
-    const newRev = {
-      id: Date.now(),
-      author: newReviewName.trim() || 'Pelanggan Setia',
-      rating: newReviewRating,
-      date: 'Hari ini',
-      comment: newReviewText,
-      variant: selectedColor?.name || 'Default'
-    };
-
-    setReviewsList([newRev, ...reviewsList]);
-    setNewReviewText('');
-    setNewReviewName('');
-    showToast('Terima kasih! Ulasanmu berhasil ditambahkan.');
   };
 
   const handleAddToCartClick = () => {
@@ -220,19 +197,27 @@ export default function ProductDetailPage({
         {/* Left: Image Gallery */}
         <div className="detail-gallery-wrap">
           <div className="detail-thumbs-column">
-            {(product.images || [product.image]).map((imgUrl, idx) => (
+            {(product.images && product.images.length > 0 ? product.images : [product.image]).map((imgUrl, idx) => (
               <div
                 key={idx}
                 className={`detail-thumb-box ${selectedImage === imgUrl ? 'active' : ''}`}
                 onClick={() => handleSelectThumbnail(imgUrl)}
               >
-                <img src={imgUrl} alt={`${product.name} thumbnail ${idx}`} />
+                <img
+                  src={getSafeProductImage(imgUrl, product.name)}
+                  alt={`${product.name} thumbnail ${idx}`}
+                  onError={(e) => handleProductImageError(e, product.name, imgUrl)}
+                />
               </div>
             ))}
           </div>
 
           <div className="detail-main-img-box">
-            <img src={selectedImage || product.image} alt={product.name} />
+            <img
+              src={getSafeProductImage(selectedImage || product.image, product.name)}
+              alt={product.name}
+              onError={(e) => handleProductImageError(e, product.name, selectedImage || product.image)}
+            />
             {product.tag && (
               <div className="detail-tag-float">
                 <span className="badge badge-bestseller">{product.tag}</span>
@@ -249,15 +234,21 @@ export default function ProductDetailPage({
           </div>
           <h1 className="detail-product-title">{product.name}</h1>
 
-          {/* Rating, Sold & Badges */}
+          {/* Rating, Sold & Badges (Real dari database) */}
           <div className="detail-meta-row">
             <div className="detail-rating-pill">
-              <Star size={16} fill="#FFB703" strokeWidth={0} />
-              <strong style={{ marginLeft: 4 }}>{product.rating}</strong>
-              <span className="meta-text-muted">({product.reviewsCount || 120} ulasan)</span>
+              {realReviewCount > 0 && realAvgRating != null ? (
+                <>
+                  <Star size={16} fill="#FFB703" strokeWidth={0} />
+                  <strong style={{ marginLeft: 4 }}>{realAvgRating.toFixed(1)}</strong>
+                  <span className="meta-text-muted">({realReviewCount} ulasan)</span>
+                </>
+              ) : (
+                <span className="meta-text-muted">Belum ada ulasan</span>
+              )}
             </div>
             <span className="meta-dot">•</span>
-            <span className="meta-sold">{product.soldCount || 200}+ terjual</span>
+            <span className="meta-sold">{product.soldCount ?? 0} terjual</span>
             <span className="meta-dot">•</span>
             <span className="badge badge-handmade">Handmade</span>
           </div>
@@ -405,7 +396,7 @@ export default function ProductDetailPage({
             className={`tab-btn ${activeTab === 'ulasan' ? 'active' : ''}`}
             onClick={() => setActiveTab('ulasan')}
           >
-            Ulasan ({reviewsList.length + 117})
+            Ulasan ({realReviewCount})
           </button>
         </div>
 
@@ -471,86 +462,86 @@ export default function ProductDetailPage({
               <div className="reviews-summary-head">
                 <div>
                   <h3 className="tab-pane-title">Ulasan Pembeli</h3>
-                  <div className="rating-big-row">
-                    <span className="big-rating-num">{product.rating}</span>
-                    <div>
-                      <div className="testi-stars">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} size={20} fill="#FFB703" strokeWidth={0} />
-                        ))}
-                      </div>
-                      <span className="total-reviews-count">Berdasarkan {reviewsList.length + 117} ulasan terverifikasi</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Add review form */}
-              <form onSubmit={handleAddReview} className="add-review-card">
-                <h4>Tulis Ulasan Kamu ♡</h4>
-                <div className="form-inline-row">
-                  <input
-                    type="text"
-                    placeholder="Nama kamu (contoh: Naila)"
-                    value={newReviewName}
-                    onChange={(e) => setNewReviewName(e.target.value)}
-                  />
-                  <div className="star-rating-picker">
-                    <span>Rating: </span>
-                    {[1, 2, 3, 4, 5].map((num) => (
-                      <button
-                        type="button"
-                        key={num}
-                        onClick={() => setNewReviewRating(num)}
-                        className="star-pick-btn"
-                      >
-                        <Star
-                          size={18}
-                          fill={num <= newReviewRating ? '#FFB703' : 'none'}
-                          color="#FFB703"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <textarea
-                  rows={2}
-                  placeholder="Ceritakan kepuasanmu dengan produk rajut ini..."
-                  value={newReviewText}
-                  onChange={(e) => setNewReviewText(e.target.value)}
-                />
-                <button type="submit" className="btn-primary btn-submit-review">
-                  Kirim Ulasan
-                </button>
-              </form>
-
-              {/* Reviews List */}
-              <div className="reviews-list-container">
-                {reviewsList.map((rev) => (
-                  <div key={rev.id} className="review-item-card">
-                    <div className="rev-head-row">
-                      <div className="rev-author-box">
-                        <div className="rev-avatar-circle">
-                          {rev.author.charAt(0)}
-                        </div>
-                        <div>
-                          <strong>{rev.author}</strong>
-                          <span className="rev-variant">Varian: {rev.variant}</span>
-                        </div>
-                      </div>
-                      <div className="rev-date-stars">
+                  {realReviewCount > 0 && realAvgRating != null ? (
+                    <div className="rating-big-row">
+                      <span className="big-rating-num">{realAvgRating.toFixed(1)}</span>
+                      <div>
                         <div className="testi-stars">
-                          {[...Array(rev.rating)].map((_, i) => (
-                            <Star key={i} size={14} fill="#FFB703" strokeWidth={0} />
+                          {[...Array(5)].map((_, i) => (
+                            <Star
+                              key={i}
+                              size={20}
+                              fill={i < Math.round(realAvgRating) ? '#FFB703' : 'none'}
+                              color="#FFB703"
+                              strokeWidth={i < Math.round(realAvgRating) ? 0 : 1.5}
+                            />
                           ))}
                         </div>
-                        <span className="rev-date">{rev.date}</span>
+                        <span className="total-reviews-count">
+                          Berdasarkan {realReviewCount} ulasan terverifikasi
+                        </span>
                       </div>
                     </div>
-                    <p className="rev-comment-text">"{rev.comment}"</p>
-                  </div>
-                ))}
+                  ) : (
+                    <p style={{ color: '#888', margin: '6px 0 0' }}>
+                      Belum ada ulasan
+                    </p>
+                  )}
+                </div>
               </div>
+
+              <div className="note-alert-box" style={{ marginBottom: '20px' }}>
+                <Sparkles size={18} color="#E63985" />
+                <span>
+                  Sudah membeli produk ini? Kirim ulasanmu melalui halaman <strong>Pesanan Saya / Detail Tracking</strong> setelah pesanan berstatus <strong>Selesai</strong>.
+                </span>
+              </div>
+
+              {/* Reviews List (Real dari tabel `reviews` di Supabase) */}
+              {loadingReviews ? (
+                <p style={{ color: '#888', textAlign: 'center', padding: '16px 0' }}>
+                  Memuat ulasan...
+                </p>
+              ) : reviewsList.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '28px 16px', color: '#888' }}>
+                  <p style={{ margin: 0, fontSize: '0.98rem' }}>
+                    Belum ada ulasan, jadilah yang pertama!
+                  </p>
+                </div>
+              ) : (
+                <div className="reviews-list-container">
+                  {reviewsList.map((rev) => (
+                    <div key={rev.id} className="review-item-card">
+                      <div className="rev-head-row">
+                        <div className="rev-author-box">
+                          <div className="rev-avatar-circle">
+                            {(rev.customer_name || 'P').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <strong>{rev.customer_name || 'Pelanggan'}</strong>
+                            <span className="rev-variant">Pembeli Terverifikasi</span>
+                          </div>
+                        </div>
+                        <div className="rev-date-stars">
+                          <div className="testi-stars">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                size={14}
+                                fill={i < (Number(rev.rating) || 0) ? '#FFB703' : 'none'}
+                                color="#FFB703"
+                                strokeWidth={i < (Number(rev.rating) || 0) ? 0 : 1.5}
+                              />
+                            ))}
+                          </div>
+                          <span className="rev-date">{formatReviewDate(rev.created_at)}</span>
+                        </div>
+                      </div>
+                      <p className="rev-comment-text">"{rev.comment}"</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

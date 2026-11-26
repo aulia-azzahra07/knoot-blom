@@ -10,6 +10,7 @@ import {
   Heart,
   Bot
 } from 'lucide-react';
+import { getSafeProductImage, handleProductImageError } from '../utils/productImage';
 
 export default function GiftChatbot({
   products = [],
@@ -72,7 +73,7 @@ export default function GiftChatbot({
     }
   };
 
-  const formatRupiah = (val) => 'Rp ' + Number(val || 15000).toLocaleString('id-ID');
+  const formatRupiah = (val) => 'Rp ' + Number(val || 0).toLocaleString('id-ID');
 
   // Intelligent Recommendation Engine
   const generateBotReply = (userQuery) => {
@@ -317,9 +318,10 @@ export default function GiftChatbot({
                       {msg.recommendations.map((prod) => (
                         <div key={prod.id || prod.name} className="chat-product-card">
                           <img
-                            src={prod.image || prod.image_url || '/images/tulip-keychain.jpg'}
+                            src={getSafeProductImage(prod.image || prod.image_url, prod.name)}
                             alt={prod.name}
                             className="chat-product-thumb"
+                            onError={(e) => handleProductImageError(e, prod.name, prod.image || prod.image_url)}
                           />
                           <div className="chat-product-info">
                             <h5 className="chat-product-name">{prod.name}</h5>

@@ -34,7 +34,13 @@ import {
 } from 'lucide-react';
 import { CATEGORIES } from '../data/products';
 import AdminCustomerChat from '../components/AdminCustomerChat';
-import { getAdminTotalUnreadCount, subscribeToAllMessages } from '../services/adminChatService';
+import {
+  getAdminTotalUnreadCount,
+  subscribeToAllMessages,
+  getOrCreateCustomerConversation,
+  getAdminConversations
+} from '../services/adminChatService';
+import { getSafeProductImage, handleProductImageError } from '../utils/productImage';
 
 export default function AdminPortalPage({
   products,
@@ -52,6 +58,61 @@ export default function AdminPortalPage({
 }) {
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'orders' | 'products' | 'chat' | 'settings'
   const [totalUnreadChat, setTotalUnreadChat] = useState(0);
+  const [chatTargetConversation, setChatTargetConversation] = useState(null);
+  const [chatTargetCustomerId, setChatTargetCustomerId] = useState(null);
+  const [chatTargetOrder, setChatTargetOrder] = useState(null);
+  const [chatRequestKey, setChatRequestKey] = useState(0);
+  const [openingChatOrderId, setOpeningChatOrderId] = useState(null);
+
+  // Handler klik "Chat Pembeli di Web" pada kartu pesanan
+  const handleOpenChatForOrder = async (order) => {
+    const customerId = order?.user_id || order?.userId || order?.raw?.user_id;
+    if (!customerId) {
+      if (showToast) showToast('Pembeli belum punya akun sehingga tidak bisa dihubungi lewat chat web.');
+      return;
+    }
+
+    const customerName = order.customer?.name || order.raw?.customer_name || 'Pelanggan';
+    console.log('[AdminPortalPage] Membuka chat pembeli untuk pesanan:', {
+      orderId: order.id,
+      customerId,
+      customerName
+    });
+
+    setOpeningChatOrderId(order.id);
+    try {
+      let conversation = null;
+      try {
+        conversation = await getOrCreateCustomerConversation(customerId, customerName);
+      } catch (upsertErr) {
+        console.error('[AdminPortalPage] Gagal upsert percakapan:', upsertErr);
+        // Coba cari percakapan yang sudah ada di daftar percakapan admin
+        try {
+          const allConvs = await getAdminConversations();
+          conversation = allConvs.find((c) => c.customer_id === customerId) || null;
+        } catch (listErr) {
+          console.error('[AdminPortalPage] Gagal cek daftar percakapan:', listErr);
+        }
+        if (!conversation) {
+          throw upsertErr;
+        }
+      }
+
+      setChatTargetConversation(conversation);
+      setChatTargetCustomerId(customerId);
+      setChatTargetOrder(order);
+      setChatRequestKey(Date.now());
+      setActiveTab('chat');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      console.error('[AdminPortalPage] Gagal membuka chat pembeli:', err);
+      if (showToast) {
+        showToast(`❌ Gagal membuka chat pembeli: ${err?.message || 'Periksa RLS tabel conversations di Supabase.'}`);
+      }
+    } finally {
+      setOpeningChatOrderId(null);
+    }
+  };
 
   // Monitor unread chat messages for badge
   useEffect(() => {
@@ -620,15 +681,31 @@ export default function AdminPortalPage({
 
                         {/* Customer Actions Row: Live In-Web Chat (Shopee-Style) */}
                         <div className="customer-actions-row">
-                          <button
-                            type="button"
-                            className="btn-sm btn-chat-web-admin"
-                            onClick={() => onOpenChatWithOrder && onOpenChatWithOrder(order)}
-                            title="Buka obrolan langsung di Web (Shopee-style)"
-                          >
-                            <MessageCircle size={15} />
-                            <span>Chat Pembeli di Web</span>
-                          </button>
+                          {(() => {
+                            const hasCustomerAccount = Boolean(
+                              order.user_id || order.userId || order.raw?.user_id
+                            );
+                            const isOpening = openingChatOrderId === order.id;
+                            return (
+                              <button
+                                type="button"
+                                className="btn-sm btn-chat-web-admin"
+                                disabled={!hasCustomerAccount || isOpening}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenChatForOrder(order);
+                                }}
+                                title={
+                                  hasCustomerAccount
+                                    ? 'Buka obrolan langsung di Web dengan pembeli'
+                                    : 'Pembeli belum punya akun'
+                                }
+                              >
+                                <MessageCircle size={15} />
+                                <span>{isOpening ? 'Membuka Chat...' : 'Chat Pembeli di Web'}</span>
+                              </button>
+                            );
+                          })()}
 
                           <button
                             type="button"
@@ -651,11 +728,9 @@ export default function AdminPortalPage({
                             <div key={idx} className="ordered-item-row">
                               <div className="item-thumbnail">
                                 <img
-                                  src={item.image || '/images/tulip-keychain.jpg'}
+                                  src={getSafeProductImage(item.image, item.name)}
                                   alt={item.name}
-                                  onError={(e) => {
-                                    e.target.src = '/images/tulip-keychain.jpg';
-                                  }}
+                                  onError={(e) => handleProductImageError(e, item.name, item.image)}
                                 />
                               </div>
                               <div className="item-meta">
@@ -855,11 +930,9 @@ export default function AdminPortalPage({
                 <div key={prod.id} className="admin-product-card">
                   <div className="prod-card-thumb">
                     <img
-                      src={prod.image || '/images/tulip-keychain.jpg'}
+                      src={getSafeProductImage(prod.image, prod.name)}
                       alt={prod.name}
-                      onError={(e) => {
-                        e.target.src = '/images/tulip-keychain.jpg';
-                      }}
+                      onError={(e) => handleProductImageError(e, prod.name, prod.image)}
                     />
                     {prod.tag && (
                       <span className={`prod-tag-badge ${prod.tagType || 'bestseller'}`}>
@@ -905,8 +978,12 @@ export default function AdminPortalPage({
                     )}
 
                     <div className="prod-stats-row">
-                      <span>★ {prod.rating || 4.9} ({prod.reviewsCount || 50})</span>
-                      <span>Terjual: {prod.soldCount || 100}+</span>
+                      <span>
+                        {prod.reviewsCount > 0 && prod.rating != null
+                          ? `★ ${Number(prod.rating).toFixed(1)} (${prod.reviewsCount})`
+                          : 'Belum ada ulasan'}
+                      </span>
+                      <span>Terjual: {prod.soldCount ?? 0}</span>
                     </div>
 
                     {/* Actions */}
@@ -1035,6 +1112,11 @@ export default function AdminPortalPage({
             currentUser={currentUser}
             orders={orders}
             showToast={showToast}
+            initialConversation={chatTargetConversation}
+            targetCustomerId={chatTargetCustomerId}
+            attachedOrder={chatTargetOrder}
+            chatRequestKey={chatRequestKey}
+            onClearAttachedOrder={() => setChatTargetOrder(null)}
             onViewOrder={(orderId) => {
               setActiveTab('orders');
               setOrderSearchQuery(orderId);
@@ -1555,11 +1637,9 @@ function ProductFormModal({ isOpen, editingProduct, onClose, onSave }) {
                 <div className="image-input-container">
                   <div className="img-preview-box">
                     <img
-                      src={image}
+                      src={getSafeProductImage(image, name || 'Preview Produk')}
                       alt="Preview"
-                      onError={(e) => {
-                        e.target.src = '/images/tulip-keychain.jpg';
-                      }}
+                      onError={(e) => handleProductImageError(e, name || 'Preview Produk', image)}
                     />
                   </div>
                   <div className="img-inputs-col">

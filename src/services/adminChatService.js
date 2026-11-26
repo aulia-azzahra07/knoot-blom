@@ -2,55 +2,91 @@ import { supabase } from '../lib/supabase';
 
 /**
  * 1. Mendapatkan atau membuat percakapan untuk customer
- * Berdasarkan customer_id (1 customer = 1 percakapan)
+ * Upsert berdasarkan customer_id (1 customer = 1 percakapan)
  */
 export const getOrCreateCustomerConversation = async (customerId, customerName) => {
   if (!customerId) throw new Error('Customer ID wajib disertakan.');
 
-  // Cari percakapan yang sudah ada
-  const { data: existing, error: fetchErr } = await supabase
+  const resolvedName = (customerName || '').trim() || 'Pelanggan Knot & Bloom';
+
+  // 1. Cek apakah percakapan sudah ada (pakai limit(1) agar tidak error jika ada data lama ganda)
+  const { data: existingList, error: fetchErr } = await supabase
     .from('conversations')
     .select('*')
     .eq('customer_id', customerId)
-    .maybeSingle();
+    .order('last_message_at', { ascending: false })
+    .limit(1);
 
   if (fetchErr) {
     console.error('[adminChatService] Gagal mencari percakapan:', fetchErr);
     throw fetchErr;
   }
 
+  const existing = Array.isArray(existingList) && existingList.length > 0 ? existingList[0] : null;
+
   if (existing) {
-    // Jika nama customer berubah atau lebih lengkap, perbarui
-    if (customerName && existing.customer_name !== customerName) {
-      supabase
+    if (customerName && existing.customer_name !== resolvedName) {
+      const { error: updErr } = await supabase
         .from('conversations')
-        .update({ customer_name: customerName })
-        .eq('id', existing.id)
-        .then(() => {});
+        .update({ customer_name: resolvedName })
+        .eq('id', existing.id);
+      if (updErr) {
+        console.warn('[adminChatService] Gagal memperbarui nama customer:', updErr);
+      } else {
+        existing.customer_name = resolvedName;
+      }
     }
     return existing;
   }
 
-  // Buat percakapan baru jika belum ada
+  // 2. Belum ada → Upsert berdasarkan customer_id
   const newConv = {
     customer_id: customerId,
-    customer_name: customerName || 'Pelanggan Knot & Bloom',
+    customer_name: resolvedName,
     last_message: '',
     last_message_at: new Date().toISOString()
   };
 
-  const { data: created, error: insertErr } = await supabase
+  const { data: created, error: upsertErr } = await supabase
     .from('conversations')
-    .insert([newConv])
+    .upsert([newConv], { onConflict: 'customer_id' })
     .select()
     .single();
 
-  if (insertErr) {
-    console.error('[adminChatService] Gagal membuat percakapan baru:', insertErr);
+  if (!upsertErr && created) {
+    return created;
+  }
+
+  // Fallback jika constraint unique customer_id belum ada (kode 42P10) → coba insert biasa
+  if (upsertErr?.code === '42P10') {
+    console.warn('[adminChatService] Fallback ke insert biasa karena constraint unique belum ditemukan:', upsertErr.message);
+    const { data: inserted, error: insertErr } = await supabase
+      .from('conversations')
+      .insert([newConv])
+      .select()
+      .single();
+
+    if (!insertErr && inserted) {
+      return inserted;
+    }
+    console.error('[adminChatService] Gagal insert percakapan baru:', insertErr);
     throw insertErr;
   }
 
-  return created;
+  // Jika race condition duplicate key (23505) → ambil ulang yang sudah ada
+  if (upsertErr?.code === '23505') {
+    const { data: retryList } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('customer_id', customerId)
+      .limit(1);
+    if (Array.isArray(retryList) && retryList.length > 0) {
+      return retryList[0];
+    }
+  }
+
+  console.error('[adminChatService] Gagal upsert percakapan baru:', upsertErr);
+  throw upsertErr;
 };
 
 /**

@@ -1,11 +1,12 @@
 import React from 'react';
 import { X, Trash2, Plus, Minus, ArrowRight, ShoppingBag, Sparkles } from 'lucide-react';
-import { PRODUCTS } from '../data/products';
+import { getSafeProductImage, handleProductImageError } from '../utils/productImage';
 
 export default function CartDrawer({
   isOpen,
   onClose,
   cartItems,
+  products = [],
   onUpdateQuantity,
   onRemoveItem,
   onProceedToCheckout,
@@ -27,8 +28,8 @@ export default function CartDrawer({
   const ongkir = subtotal === 0 ? 0 : (isFreeShipping ? 0 : 5000);
   const total = subtotal + ongkir;
 
-  // Recommended products not already in cart
-  const recommended = PRODUCTS.filter(
+  // Recommended products not already in cart (diambil dari tabel products Supabase)
+  const recommended = products.filter(
     (p) => !cartItems.some((ci) => ci.id === p.id)
   ).slice(0, 4);
 
@@ -90,7 +91,11 @@ export default function CartDrawer({
                 {cartItems.map((item) => (
                   <div key={`${item.id}-${item.selectedColor?.name || 'def'}`} className="cart-item-card">
                     <div className="cart-item-img" onClick={() => { onSelectProduct(item); onClose(); }}>
-                      <img src={item.image} alt={item.name} />
+                      <img
+                        src={getSafeProductImage(item.image, item.name)}
+                        alt={item.name}
+                        onError={(e) => handleProductImageError(e, item.name, item.image)}
+                      />
                     </div>
 
                     <div className="cart-item-info">
@@ -157,7 +162,11 @@ export default function CartDrawer({
                           onClose();
                         }}
                       >
-                        <img src={rec.image} alt={rec.name} />
+                        <img
+                          src={getSafeProductImage(rec.image, rec.name)}
+                          alt={rec.name}
+                          onError={(e) => handleProductImageError(e, rec.name, rec.image)}
+                        />
                         <div className="rec-info">
                           <span className="rec-name">{rec.name}</span>
                           <span className="rec-price">{formatRupiah(rec.price)}</span>

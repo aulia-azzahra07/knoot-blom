@@ -23,16 +23,22 @@ import {
   Package,
   Calendar,
   CheckCircle2,
-  FileText
+  FileText,
+  Star
 } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 import OrderTrackingStepper from '../components/OrderTrackingStepper';
 import CustomerAdminChat from '../components/CustomerAdminChat';
+import { getSafeProductImage, handleProductImageError } from '../utils/productImage';
 import {
   getOrCreateCustomerConversation,
   getCustomerUnreadCount,
   subscribeToConversationMessages
 } from '../services/adminChatService';
+import {
+  fetchReviewsByOrder,
+  submitProductReview
+} from '../services/reviewService';
 
 // Contoh Pesanan Nyata & Interaktif untuk Pengguna Baru / Uji Coba Demo
 const SAMPLE_DEMO_ORDERS = [
@@ -214,7 +220,8 @@ export default function MyAccountPage({
   onOpenChatWithOrder = null,
   onUpdateOrderStatus = null,
   onNavigate = null,
-  _onNavigate = null
+  _onNavigate = null,
+  onReviewSubmitted = null
 }) {
   const [currentTab, setCurrentTab] = useState(activeTab || 'orders');
   const [expandedOrderIds, setExpandedOrderIds] = useState({});
@@ -225,6 +232,82 @@ export default function MyAccountPage({
   const [copiedResi, setCopiedResi] = useState(false);
   const [selectedOrderForChat, setSelectedOrderForChat] = useState(null);
   const [customerUnreadCount, setCustomerUnreadCount] = useState(0);
+
+  // State ulasan produk untuk pesanan berstatus 'Selesai'
+  const [orderReviews, setOrderReviews] = useState({});
+  const [reviewDrafts, setReviewDrafts] = useState({});
+  const [submittingReviewKey, setSubmittingReviewKey] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const orderDbId = selectedTrackingOrder?.dbId;
+    if (trackingViewMode !== 'detail' || !orderDbId) {
+      setOrderReviews({});
+      return;
+    }
+
+    fetchReviewsByOrder(orderDbId).then((rows) => {
+      if (!isMounted) return;
+      const map = {};
+      (rows || []).forEach((r) => {
+        if (r.product_id) map[r.product_id] = r;
+      });
+      setOrderReviews(map);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [trackingViewMode, selectedTrackingOrder?.dbId]);
+
+  const handleReviewDraftChange = (productId, patch) => {
+    setReviewDrafts((prev) => ({
+      ...prev,
+      [productId]: {
+        rating: prev[productId]?.rating || 5,
+        comment: prev[productId]?.comment || '',
+        ...patch
+      }
+    }));
+  };
+
+  const handleSubmitOrderReview = async (e, order, item) => {
+    e.preventDefault();
+    const productId = item.productId || item.id;
+    const orderDbId = order.dbId;
+    const draft = reviewDrafts[productId] || { rating: 5, comment: '' };
+
+    if (!currentUser?.id) {
+      if (showToast) showToast('Silakan login terlebih dahulu untuk mengirim ulasan.');
+      return;
+    }
+    if (!draft.comment.trim()) {
+      if (showToast) showToast('Mohon tulis komentar ulasanmu terlebih dahulu.');
+      return;
+    }
+
+    setSubmittingReviewKey(productId);
+    try {
+      const saved = await submitProductReview({
+        userId: currentUser.id,
+        productId,
+        orderId: orderDbId,
+        customerName: currentUser.name || order.customer?.name || 'Pelanggan',
+        rating: draft.rating || 5,
+        comment: draft.comment
+      });
+
+      setOrderReviews((prev) => ({ ...prev, [productId]: saved }));
+      setReviewDrafts((prev) => ({ ...prev, [productId]: { rating: 5, comment: '' } }));
+      if (showToast) showToast('Terima kasih! Ulasanmu berhasil dikirim.');
+      if (onReviewSubmitted) onReviewSubmitted();
+    } catch (err) {
+      console.error('[MyAccountPage] Gagal kirim ulasan:', err);
+      if (showToast) showToast(`❌ ${err.message || 'Gagal mengirim ulasan.'}`);
+    } finally {
+      setSubmittingReviewKey(null);
+    }
+  };
 
   // Pantau pesan belum dibaca dari admin
   useEffect(() => {
@@ -773,9 +856,10 @@ export default function MyAccountPage({
                             selectedTrackingOrder.items.map((item, itemIdx) => (
                               <div key={itemIdx} className="detail-item-record">
                                 <img
-                                  src={item.image || '/images/tulip-keychain.jpg'}
+                                  src={getSafeProductImage(item.image, item.name)}
                                   alt={item.name}
                                   className="detail-item-img"
+                                  onError={(e) => handleProductImageError(e, item.name, item.image)}
                                 />
                                 <div className="detail-item-text">
                                   <h6>{item.name}</h6>
@@ -864,6 +948,114 @@ export default function MyAccountPage({
                         </div>
                       </div>
                     </div>
+
+                    {/* FORM KIRIM ULASAN (Hanya tampil jika pesanan berstatus 'Selesai') */}
+                    {selectedTrackingOrder.status === 'Selesai' && selectedTrackingOrder.dbId && (
+                      <div className="order-review-section">
+                        <div className="card-head-simple" style={{ marginBottom: '14px' }}>
+                          <Star size={18} color="#FFB703" fill="#FFB703" />
+                          <h5>Beri Ulasan Produk Pesanan Ini</h5>
+                        </div>
+                        <p style={{ fontSize: '0.88rem', color: '#6B7280', marginBottom: '16px' }}>
+                          Bagikan pengalamanmu tentang produk rajut yang kamu terima (1 ulasan per produk per pesanan).
+                        </p>
+
+                        <div className="order-review-items-list">
+                          {(selectedTrackingOrder.items || []).map((item, idx) => {
+                            const productId = item.productId || item.id;
+                            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                            const canReview = typeof productId === 'string' && uuidRegex.test(productId);
+                            const existingRev = canReview ? orderReviews[productId] : null;
+                            const draft = reviewDrafts[productId] || { rating: 5, comment: '' };
+                            const isSubmitting = submittingReviewKey === productId;
+
+                            if (!canReview) return null;
+
+                            return (
+                              <div key={productId || idx} className="review-item-form-card">
+                                <div className="review-item-form-head">
+                                  <img
+                                    src={getSafeProductImage(item.image, item.name)}
+                                    alt={item.name}
+                                    className="detail-item-img"
+                                    onError={(e) => handleProductImageError(e, item.name, item.image)}
+                                  />
+                                  <div>
+                                    <h6>{item.name}</h6>
+                                    <span>{item.quantity} × {formatRupiah(item.price)}</span>
+                                  </div>
+                                </div>
+
+                                {existingRev ? (
+                                  <div className="review-submitted-box">
+                                    <div className="review-submitted-badge">
+                                      <CheckCircle2 size={15} color="#059669" />
+                                      <span>Ulasan terkirim</span>
+                                      <span className="submitted-stars-inline">
+                                        {[...Array(5)].map((_, sIdx) => (
+                                          <Star
+                                            key={sIdx}
+                                            size={14}
+                                            fill={sIdx < Number(existingRev.rating) ? '#FFB703' : 'none'}
+                                            color="#FFB703"
+                                            strokeWidth={sIdx < Number(existingRev.rating) ? 0 : 1.5}
+                                          />
+                                        ))}
+                                      </span>
+                                    </div>
+                                    <p className="review-submitted-comment">"{existingRev.comment}"</p>
+                                  </div>
+                                ) : (
+                                  <form
+                                    className="order-review-form"
+                                    onSubmit={(e) => handleSubmitOrderReview(e, selectedTrackingOrder, item)}
+                                  >
+                                    <div className="star-picker-row">
+                                      <span>Rating:</span>
+                                      {[1, 2, 3, 4, 5].map((num) => (
+                                        <button
+                                          key={num}
+                                          type="button"
+                                          className="star-pick-btn"
+                                          onClick={() => handleReviewDraftChange(productId, { rating: num })}
+                                          title={`${num} bintang`}
+                                        >
+                                          <Star
+                                            size={20}
+                                            fill={num <= (draft.rating || 5) ? '#FFB703' : 'none'}
+                                            color="#FFB703"
+                                          />
+                                        </button>
+                                      ))}
+                                      <span className="star-rating-val">({draft.rating || 5}/5)</span>
+                                    </div>
+
+                                    <textarea
+                                      rows={2}
+                                      className="order-review-textarea"
+                                      placeholder="Tulis ulasanmu tentang kualitas, warna, atau pengemasan produk..."
+                                      maxLength={1000}
+                                      value={draft.comment || ''}
+                                      onChange={(e) => handleReviewDraftChange(productId, { comment: e.target.value })}
+                                      disabled={isSubmitting}
+                                      required
+                                    />
+
+                                    <button
+                                      type="submit"
+                                      className="btn-primary btn-sm"
+                                      disabled={isSubmitting || !(draft.comment || '').trim()}
+                                    >
+                                      {isSubmitting ? 'Mengirim Ulasan...' : 'Kirim Ulasan'}
+                                    </button>
+                                  </form>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -1076,9 +1268,10 @@ export default function MyAccountPage({
                                     order.items.map((item, itemIdx) => (
                                       <div key={itemIdx} className="order-expanded-item-row">
                                         <img
-                                          src={item.image || '/images/tulip-keychain.jpg'}
+                                          src={getSafeProductImage(item.image, item.name)}
                                           alt={item.name}
                                           className="item-thumb-img"
+                                          onError={(e) => handleProductImageError(e, item.name, item.image)}
                                         />
                                         <div className="item-expanded-info">
                                           <h6 className="item-expanded-name">{item.name}</h6>

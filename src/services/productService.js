@@ -1,6 +1,6 @@
 
 import { supabase } from '../lib/supabase';
-import { PRODUCTS } from '../data/products';
+import { fetchProductRatingStats } from './reviewService';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -42,46 +42,142 @@ const adminRequest = async (path, options = {}) => {
   return parseResponse(response);
 };
 
+// Ambil total terjual real per product_id dari view `product_sales` (hanya pesanan status 'Selesai')
+export const fetchProductSalesMap = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('product_sales')
+      .select('product_id, total_sold');
+
+    if (error) {
+      console.warn('[ProductService] View product_sales belum tersedia atau gagal dimuat:', error.message);
+      return {};
+    }
+
+    const salesMap = {};
+    (data || []).forEach((row) => {
+      if (row.product_id) {
+        salesMap[row.product_id] = Number(row.total_sold) || 0;
+      }
+    });
+    return salesMap;
+  } catch (err) {
+    console.warn('[ProductService] Error saat memuat product_sales:', err.message);
+    return {};
+  }
+};
+
+// Normalisasi satu record produk dari tabel Supabase `products`
+const mapSupabaseProduct = (item, salesMap = {}, ratingStatsMap = {}) => {
+  const price = Number(item.price) || 0;
+  const originalPrice =
+    item.original_price !== null && item.original_price !== undefined
+      ? Number(item.original_price)
+      : price;
+  const imageUrl = typeof item.image_url === 'string' ? item.image_url.trim() : '';
+  const rawImages = Array.isArray(item.images)
+    ? item.images.filter((url) => typeof url === 'string' && url.trim())
+    : [];
+  const images = rawImages.length > 0 ? rawImages : (imageUrl ? [imageUrl] : []);
+  const variants = Array.isArray(item.product_variants) ? item.product_variants : [];
+  const colors =
+    Array.isArray(item.colors) && item.colors.length > 0
+      ? item.colors
+      : variants.map((v) => ({
+          name: v.name,
+          hex: v.color_hex || '#FF86C1',
+          image: v.image_url || v.image || undefined,
+          stock: v.stock,
+        }));
+
+  const ratingInfo = ratingStatsMap[item.id] || null;
+  const realSold = salesMap[item.id] ?? 0;
+
+  return {
+    ...item,
+    price,
+    originalPrice,
+    image: imageUrl || images[0] || '',
+    image_url: imageUrl || images[0] || '',
+    images,
+    colors,
+    rating: ratingInfo ? ratingInfo.avgRating : null,
+    reviewsCount: ratingInfo ? ratingInfo.reviewCount : 0,
+    soldCount: realSold,
+    tagType: item.tag_type,
+    variants,
+  };
+};
+
 /**
  * Mengambil produk aktif untuk katalog publik.
- * Database menjadi sumber data utama.
+ * SATU SUMBER SAJA: tabel `products` + view `product_sales` + tabel `reviews` di Supabase.
  */
 export const fetchProducts = async () => {
-  // 1. Ambil langsung dari Supabase SDK
+  try {
+    const [productsRes, salesMap, ratingStatsMap] = await Promise.all([
+      supabase
+        .from('products')
+        .select('*, product_variants(*)')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true }),
+      fetchProductSalesMap(),
+      fetchProductRatingStats()
+    ]);
+
+    const { data, error } = productsRes;
+
+    if (error) {
+      console.error('[ProductService] Gagal memuat produk dari Supabase:', error);
+      return [];
+    }
+
+    if (!Array.isArray(data)) {
+      return [];
+    }
+
+    return data.map((item) => mapSupabaseProduct(item, salesMap, ratingStatsMap));
+  } catch (err) {
+    console.error('[ProductService] Error koneksi saat memuat produk dari Supabase:', err);
+    return [];
+  }
+};
+
+/**
+ * Mengambil map produk (id -> { id, name, price, image_url }) langsung dari Supabase
+ * untuk verifikasi harga resmi saat checkout & pencatatan order_items.
+ */
+export const fetchProductsByIds = async (productIds = []) => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const validIds = [...new Set(productIds.filter((id) => typeof id === 'string' && uuidRegex.test(id)))];
+  if (validIds.length === 0) return {};
+
   try {
     const { data, error } = await supabase
       .from('products')
-      .select('*, product_variants(*)')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+      .select('id, name, slug, price, original_price, image_url')
+      .in('id', validIds);
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return data.map((item) => ({
-        ...item,
-        image: item.image_url,
-        originalPrice: item.original_price,
-        reviewsCount: item.reviews_count,
-        soldCount: item.sold_count,
-        tagType: item.tag_type,
-        variants: item.product_variants || []
-      }));
+    if (error) {
+      console.error('[ProductService] Gagal memverifikasi harga produk dari Supabase:', error);
+      return {};
     }
-  } catch (err) {
-    console.warn('Gagal fetch products langsung dari Supabase:', err.message);
-  }
 
-  // 2. Ambil dari Backend API
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/products`);
-    const result = await parseResponse(response);
-    if (Array.isArray(result.products)) {
-      return result.products;
-    }
+    if (!Array.isArray(data)) return {};
+    return Object.fromEntries(
+      data.map((p) => [
+        p.id,
+        {
+          ...p,
+          price: Number(p.price) || 0,
+          image: typeof p.image_url === 'string' ? p.image_url.trim() : '',
+        },
+      ])
+    );
   } catch (err) {
-    // Backend offline is normal in dev mode
+    console.error('[ProductService] Error verifikasi harga produk:', err);
+    return {};
   }
-
-  return PRODUCTS;
 };
 
 /**

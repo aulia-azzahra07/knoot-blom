@@ -14,11 +14,14 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { createCashOrderDirectly } from '../services/orderService';
+import { fetchProductsByIds } from '../services/productService';
+import { getSafeProductImage, handleProductImageError } from '../utils/productImage';
 import { supabase } from '../lib/supabase';
 import OrderTrackingStepper from '../components/OrderTrackingStepper';
 
 export default function CheckoutPage({
   cartItems,
+  products = [],
   onBackToCart,
   onOrderSuccess,
   showToast,
@@ -41,8 +44,21 @@ export default function CheckoutPage({
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
 
-  const subtotal = cartItems.reduce(
-    (acc, item) => acc + item.price * item.quantity,
+  // Pastikan setiap item non-custom memakai harga & gambar terbaru dari tabel `products` Supabase
+  const resolvedCartItems = cartItems.map((item) => {
+    if (item.isCustom || item.isCustomKit) return item;
+    const dbProd = products.find((p) => p.id === item.id || (item.slug && p.slug === item.slug));
+    if (!dbProd) return item;
+    return {
+      ...item,
+      name: dbProd.name || item.name,
+      price: Number(dbProd.price) || Number(item.price) || 0,
+      image: item.image && item.image.startsWith('http') ? item.image : (dbProd.image || item.image)
+    };
+  });
+
+  const subtotal = resolvedCartItems.reduce(
+    (acc, item) => acc + Number(item.price) * Number(item.quantity),
     0
   );
 
@@ -61,7 +77,7 @@ export default function CheckoutPage({
       showToast('Mohon lengkapi nama, nomor HP, dan alamat terlebih dahulu.');
       return;
     }
-    if (cartItems.length === 0) {
+    if (resolvedCartItems.length === 0) {
       showToast('Keranjang belanja masih kosong.');
       return;
     }
@@ -78,6 +94,32 @@ export default function CheckoutPage({
     try {
       setIsProcessing(true);
 
+      // ── Verifikasi harga terbaru langsung dari tabel `products` di Supabase ──
+      const dbProductsMap = await fetchProductsByIds(
+        resolvedCartItems
+          .filter((item) => !item.isCustom && !item.isCustomKit)
+          .map((item) => item.id || item.productId)
+      );
+
+      const verifiedCartItems = resolvedCartItems.map((item) => {
+        if (item.isCustom || item.isCustomKit) return item;
+        const dbProd = dbProductsMap[item.id || item.productId];
+        if (!dbProd) return item;
+        return {
+          ...item,
+          name: dbProd.name || item.name,
+          price: Number(dbProd.price),
+          image: item.image && item.image.startsWith('http') ? item.image : (dbProd.image || item.image)
+        };
+      });
+
+      const verifiedSubtotal = verifiedCartItems.reduce(
+        (acc, item) => acc + Number(item.price) * Number(item.quantity),
+        0
+      );
+      const verifiedShippingCost = verifiedSubtotal >= 50000 ? 0 : 5000;
+      const verifiedTotal = verifiedSubtotal + verifiedShippingCost;
+
       let result = null;
       let usedBackend = false;
 
@@ -90,12 +132,12 @@ export default function CheckoutPage({
             customerName: fullName.trim(),
             phone: phone.trim(),
             address: `${address.trim()}, ${city.trim()}, ${province.trim()} ${postalCode.trim()}`,
-            subtotal,
-            shippingCost,
-            total,
+            subtotal: verifiedSubtotal,
+            shippingCost: verifiedShippingCost,
+            total: verifiedTotal,
             notes: orderNotes.trim(),
             userId: authUser.id,
-            cartItems: cartItems.map((item) => ({
+            cartItems: verifiedCartItems.map((item) => ({
               id: item.id,
               name: item.name,
               price: item.price,
@@ -130,11 +172,11 @@ export default function CheckoutPage({
           customerName: fullName.trim(),
           phone: phone.trim(),
           address: `${address.trim()}, ${city.trim()}, ${province.trim()} ${postalCode.trim()}`,
-          subtotal,
-          shippingCost,
-          total,
+          subtotal: verifiedSubtotal,
+          shippingCost: verifiedShippingCost,
+          total: verifiedTotal,
           notes: orderNotes.trim(),
-          cartItems,
+          cartItems: verifiedCartItems,
         });
         console.log('[Checkout] ✅ Pesanan via Supabase langsung berhasil:', result.orderNumber);
       }
@@ -144,16 +186,20 @@ export default function CheckoutPage({
         throw new Error('Respons tidak valid dari server. Pesanan mungkin tidak tersimpan.');
       }
 
+      const finalSubtotal = result.subtotal ?? verifiedSubtotal;
+      const finalShippingCost = result.shippingCost ?? verifiedShippingCost;
+      const finalTotal = result.total ?? verifiedTotal;
+
       // ── Buat objek order untuk UI ─────────────────────────────────────────
       const newOrder = {
         id: result.orderNumber || `KB-${Date.now().toString().slice(-6)}`,
         orderId: result.orderId,
         dbId: result.orderId,
         date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
-        items: cartItems.map((item) => ({ ...item })),
-        subtotal,
-        shippingCost,
-        total,
+        items: verifiedCartItems.map((item) => ({ ...item })),
+        subtotal: finalSubtotal,
+        shippingCost: finalShippingCost,
+        total: finalTotal,
         paymentMethod: 'COD',
         paymentStatus: 'belum_dibayar',
         orderStatus: 'Dikemas',
@@ -171,7 +217,7 @@ export default function CheckoutPage({
           orderNumber: result.orderNumber,
           orderId: result.orderId,
           paymentMethod: 'COD',
-          total,
+          total: finalTotal,
           customerName: fullName.trim(),
         }));
       } catch (_) {}
@@ -404,15 +450,19 @@ export default function CheckoutPage({
         <div className="checkout-right-col">
           <div className="checkout-summary-card">
             <h3 className="summary-card-title">
-              Ringkasan Belanja <span className="item-count-chip">({cartItems.length} item)</span>
+              Ringkasan Belanja <span className="item-count-chip">({resolvedCartItems.length} item)</span>
             </h3>
 
             {/* Compact items list */}
             <div className="checkout-items-preview">
-              {cartItems.map((item, idx) => (
+              {resolvedCartItems.map((item, idx) => (
                 <div key={idx} className="checkout-item-row">
                   <div className="preview-img-box">
-                    <img src={item.image} alt={item.name} />
+                    <img
+                      src={getSafeProductImage(item.image, item.name)}
+                      alt={item.name}
+                      onError={(e) => handleProductImageError(e, item.name, item.image)}
+                    />
                     <span className="preview-qty-badge">{item.quantity}</span>
                   </div>
                   <div className="preview-info">
@@ -422,7 +472,7 @@ export default function CheckoutPage({
                     )}
                   </div>
                   <div className="preview-price">
-                    {formatRupiah(item.price * item.quantity)}
+                    {formatRupiah(Number(item.price) * Number(item.quantity))}
                   </div>
                 </div>
               ))}

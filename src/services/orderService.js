@@ -1,32 +1,59 @@
 import { supabase } from '../lib/supabase';
+import { fetchProductsByIds } from './productService';
+import { PRODUCT_IMAGE_PLACEHOLDER } from '../utils/productImage';
 
 const API_BASE_URL = 'http://localhost:5000';
 
 /**
- * Deteksi gambar produk fallback berdasarkan nama (dipakai kalau tidak ada image_url dari database)
- */
-const resolveProductImage = (productName = '', imageUrl = '') => {
-  if (imageUrl && imageUrl.trim()) return imageUrl;
-  const lower = productName.toLowerCase();
-  if (lower.includes('bintang')) return '/images/tulip-keychain.jpg';
-  if (lower.includes('pita')) return '/images/tulip-keychain.jpg';
-  if (lower.includes('pouch') || lower.includes('tas')) return '/images/mini-crochet-bag.jpg';
-  if (lower.includes('hairband') || lower.includes('bando') || lower.includes('scrunchie')) return '/images/flower-scrunchie.jpg';
-  if (lower.includes('diy') || lower.includes('kit')) return '/images/diy-crochet-kit.jpg';
-  return '/images/tulip-keychain.jpg';
-};
-
-/**
- * Ambil map product_id -> image_url dari tabel products (tanpa butuh FK)
+ * Ambil map produk (byId & byName) -> image_url langsung dari tabel `products` Supabase.
+ * Tidak lagi memakai fallback gambar produk lokal/dummy.
  */
 const fetchProductImagesMap = async () => {
   try {
-    const { data } = await supabase.from('products').select('id, image_url');
-    if (Array.isArray(data)) {
-      return Object.fromEntries(data.map((p) => [p.id, p.image_url || '']));
+    const { data, error } = await supabase.from('products').select('id, name, image_url');
+    if (error) {
+      console.warn('[OrderService] Gagal memuat image_url produk dari Supabase:', error.message);
+      return { byId: {}, byName: {} };
     }
-  } catch {}
-  return {};
+    if (Array.isArray(data)) {
+      const byId = {};
+      const byName = {};
+      data.forEach((p) => {
+        const url = typeof p.image_url === 'string' ? p.image_url.trim() : '';
+        if (p.id && url) byId[p.id] = url;
+        if (p.name && url) byName[p.name.trim().toLowerCase()] = url;
+      });
+      return { byId, byName };
+    }
+  } catch (err) {
+    console.warn('[OrderService] Error saat memuat gambar produk:', err.message);
+  }
+  return { byId: {}, byName: {} };
+};
+
+/**
+ * Cari URL gambar resmi produk dari database `products`.
+ * Jika tidak ditemukan, kembalikan placeholder netral (bukan gambar produk lain).
+ */
+const resolveOrderItemImage = (item, productImagesMap = { byId: {}, byName: {} }) => {
+  const directUrl = item.image_url || item.products?.image_url || '';
+  if (typeof directUrl === 'string' && directUrl.trim()) {
+    return directUrl.trim();
+  }
+
+  const byId = productImagesMap?.byId || {};
+  if (item.product_id && byId[item.product_id]) {
+    return byId[item.product_id];
+  }
+
+  // Untuk order lama yang product_id-nya null, cocokkan awalan nama produk dengan tabel `products`
+  const byName = productImagesMap?.byName || {};
+  const baseName = String(item.product_name || '').split(' - ')[0].trim().toLowerCase();
+  if (baseName && byName[baseName]) {
+    return byName[baseName];
+  }
+
+  return PRODUCT_IMAGE_PLACEHOLDER;
 };
 
 /**
@@ -86,7 +113,7 @@ export const mapSupabaseOrderToUi = (o, productImagesMap = {}) => {
     price: Number(item.price) || 0,
     quantity: Number(item.quantity) || 1,
     subtotal: (Number(item.price) || 0) * (Number(item.quantity) || 1),
-    image: resolveProductImage(item.product_name, item.image_url || item.products?.image_url || '')
+    image: resolveOrderItemImage(item, productImagesMap)
   }));
 
   const itemsSummary = items.length > 0
@@ -154,15 +181,17 @@ const isRealOrder = (order) => {
  * Tidak menggunakan data dummy.
  */
 export const fetchOrders = async () => {
+  const productImagesMap = await fetchProductImagesMap();
+
   // 1. Prioritas Utama: Langsung dari Supabase SDK (Koneksi Cepat & Realtime)
   try {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(image_url)), payments(*), order_status_history(*)')
+      .select('*, order_items(*), payments(*), order_status_history(*)')
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
-      return data.map(mapSupabaseOrderToUi);
+      return data.map((o) => mapSupabaseOrderToUi(o, productImagesMap));
     }
     if (error) {
       console.warn('Supabase SDK error:', error.message);
@@ -177,7 +206,7 @@ export const fetchOrders = async () => {
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) {
-        return data.orders.map(mapSupabaseOrderToUi);
+        return data.orders.map((o) => mapSupabaseOrderToUi(o, productImagesMap));
       }
     }
   } catch (err) {
@@ -307,21 +336,58 @@ export const createCashOrderDirectly = async ({
 
   const authenticatedUserId = user.id;
 
-  // ── STEP 1: Buat nomor pesanan unik ──────────────────────────────────────
+  // ── STEP 1: Buat nomor pesanan unik & verifikasi harga dari database ─────
   const timestamp = Date.now();
   const orderNumber = `KB-${timestamp.toString().slice(-6)}`;
 
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const dbProductsMap = Array.isArray(cartItems) && cartItems.length > 0
+    ? await fetchProductsByIds(
+        cartItems
+          .filter((item) => !item.isCustom && !item.isCustomKit)
+          .map((item) => item.id || item.productId)
+      )
+    : {};
+
+  const verifiedItems = Array.isArray(cartItems)
+    ? cartItems.map((item) => {
+        const rawId = item.id || item.productId;
+        const isValidUUID = typeof rawId === 'string' && uuidRegex.test(rawId);
+        const dbProd = !item.isCustom && !item.isCustomKit && isValidUUID ? dbProductsMap[rawId] : null;
+        const itemPrice = dbProd ? Number(dbProd.price) : (Number(item.price) || 0);
+        const itemQty = Number(item.quantity) || 1;
+        const itemName = dbProd ? dbProd.name : (item.name || 'Produk');
+        return {
+          product_id: isValidUUID ? rawId : null,
+          product_name: `${itemName}${item.selectedColor ? ` - ${item.selectedColor.name || item.selectedColor}` : ''}`,
+          price: itemPrice,
+          quantity: itemQty,
+          subtotal: itemPrice * itemQty
+        };
+      })
+    : [];
+
+  const verifiedSubtotal = verifiedItems.length > 0
+    ? verifiedItems.reduce((sum, item) => sum + item.subtotal, 0)
+    : Number(subtotal) || 0;
+  const verifiedShippingCost = verifiedItems.length > 0
+    ? (verifiedSubtotal >= 50000 ? 0 : 5000)
+    : (Number(shippingCost) || 0);
+  const verifiedTotal = verifiedItems.length > 0
+    ? verifiedSubtotal + verifiedShippingCost
+    : (Number(total) || 0);
+
   console.log('[Checkout] Membuat pesanan:', orderNumber, 'untuk user:', authenticatedUserId);
 
-  // ── STEP 2: Insert ke tabel orders ───────────────────────────────────────
+  // ── STEP 2: Insert ke tabel orders (harga terverifikasi dari database) ───
   const orderPayload = {
     order_number: orderNumber,
     customer_name: customerName,
     phone: phone,
     address: address + (notes ? ` (Catatan: ${notes})` : ''),
-    subtotal: Number(subtotal),
-    shipping_cost: Number(shippingCost),
-    total: Number(total),
+    subtotal: verifiedSubtotal,
+    shipping_cost: verifiedShippingCost,
+    total: verifiedTotal,
     payment_method: 'COD',
     payment_status: 'belum_dibayar',
     order_status: 'Dikemas',
@@ -344,24 +410,16 @@ export const createCashOrderDirectly = async ({
 
   console.log('[Checkout] ✅ Order berhasil dibuat:', orderData.id);
 
-  // ── STEP 3: Insert ke order_items ────────────────────────────────────────
-  if (Array.isArray(cartItems) && cartItems.length > 0) {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const itemsPayload = cartItems.map((item) => {
-      const rawId = item.id || item.productId;
-      const isValidUUID = typeof rawId === 'string' && uuidRegex.test(rawId);
-      const itemPrice = Number(item.price) || 0;
-      const itemQty = Number(item.quantity) || 1;
-      return {
-        order_id: orderData.id,
-        product_id: isValidUUID ? rawId : null,
-        product_name: `${item.name || 'Produk'}${item.selectedColor ? ` - ${item.selectedColor.name || item.selectedColor}` : ''}`,
-        price: itemPrice,
-        quantity: itemQty,
-        subtotal: itemPrice * itemQty,
-        image_url: item.image || item.image_url || ''
-      };
-    });
+  // ── STEP 3: Insert ke order_items (memakai harga dari database) ──────────
+  if (verifiedItems.length > 0) {
+    const itemsPayload = verifiedItems.map((item) => ({
+      order_id: orderData.id,
+      product_id: item.product_id,
+      product_name: item.product_name,
+      price: item.price,
+      quantity: item.quantity,
+      subtotal: item.subtotal
+    }));
 
     const { error: itemsError } = await supabase.from('order_items').insert(itemsPayload);
     if (itemsError) {
@@ -391,6 +449,9 @@ export const createCashOrderDirectly = async ({
     isCash: true,
     orderId: orderData.id,
     orderNumber: orderNumber,
+    subtotal: verifiedSubtotal,
+    shippingCost: verifiedShippingCost,
+    total: verifiedTotal,
     status: 'Dikemas',
     status_bayar: 'belum_dibayar'
   };
@@ -500,6 +561,8 @@ export const fetchCustomerOrders = async (userId) => {
     return [];
   }
 
+  const productImagesMap = await fetchProductImagesMap();
+
   // 1. Prioritas Utama: Mengambil via API Backend Express dengan Bearer Token
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -514,7 +577,7 @@ export const fetchCustomerOrders = async (userId) => {
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.orders)) {
-          return json.orders.map(mapSupabaseOrderToUi);
+          return json.orders.map((o) => mapSupabaseOrderToUi(o, productImagesMap));
         }
       }
     }
@@ -526,12 +589,12 @@ export const fetchCustomerOrders = async (userId) => {
   try {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(image_url)), payments(*)')
+      .select('*, order_items(*), payments(*)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
-      return data.map(mapSupabaseOrderToUi);
+      return data.map((o) => mapSupabaseOrderToUi(o, productImagesMap));
     }
     if (error) {
       console.warn('Supabase customer orders query notice:', error.message);
@@ -569,6 +632,8 @@ export const fetchCustomerOrderDetail = async (orderId, userId) => {
     throw err;
   }
 
+  const productImagesMap = await fetchProductImagesMap();
+
   // 1. Coba lewat backend Express endpoint /api/customer/orders/:orderId
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -588,7 +653,7 @@ export const fetchCustomerOrderDetail = async (orderId, userId) => {
       }
       if (json.success && json.order) {
         return {
-          order: mapSupabaseOrderToUi(json.order),
+          order: mapSupabaseOrderToUi(json.order, productImagesMap),
           history: json.history || []
         };
       }
@@ -606,7 +671,7 @@ export const fetchCustomerOrderDetail = async (orderId, userId) => {
   try {
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(image_url)), payments(*)')
+      .select('*, order_items(*), payments(*)')
       .eq(queryField, orderId)
       .maybeSingle();
 
@@ -644,7 +709,7 @@ export const fetchCustomerOrderDetail = async (orderId, userId) => {
     }
 
     return {
-      order: mapSupabaseOrderToUi(order),
+      order: mapSupabaseOrderToUi(order, productImagesMap),
       history: history
     };
   } catch (sbErr) {
