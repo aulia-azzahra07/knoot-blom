@@ -413,20 +413,42 @@ export default function App() {
     }
   };
 
-  // Order Management Handlers (Admin & Customer - Local & Supabase Synchronized)
-  const handleUpdateOrderStatus = async (orderId, newStatus, trackingNumber = '', courier = '', alasanBatal = '') => {
-    // 1. Update state lokal segera untuk UI responsif
+  // Order Management Handlers (Admin - Server/RPC Validated & Supabase Synchronized)
+  const handleUpdateOrderStatus = async (orderId, newStatus, options = {}) => {
+    const normalizedOptions =
+      typeof options === 'object' && options !== null
+        ? options
+        : {};
+
+    // 1. Validasi & simpan via Server / RPC transaksional terlebih dahulu (jangan lompati urutan)
+    const result = await updateOrderStatusOnServer(orderId, newStatus, normalizedOptions);
+    if (!result || !result.success) {
+      const errMsg = result?.message || 'Gagal memperbarui status pesanan.';
+      showToast(`❌ ${errMsg}`);
+      return { success: false, message: errMsg };
+    }
+
+    const updatedServerOrder = result.order || null;
+
+    // 2. Update state lokal setelah server menyetujui
     setOrders((prev) => {
       const updated = prev.map((o) => {
         if (o.id === orderId || o.dbId === orderId) {
           const patch = {
             ...o,
             status: newStatus,
-            trackingNumber: trackingNumber !== undefined ? trackingNumber : o.trackingNumber,
           };
-          if (courier) patch.courier = courier;
-          if (alasanBatal) patch.alasan_batal = alasanBatal;
-          if (newStatus === 'Selesai') patch.status_bayar = 'dibayar';
+          if (newStatus === 'Diantar') {
+            patch.estimasi_antar = updatedServerOrder?.estimasi_antar ?? normalizedOptions.estimasiAntar ?? o.estimasi_antar;
+            patch.pengantar = updatedServerOrder?.pengantar ?? normalizedOptions.pengantar ?? o.pengantar;
+          }
+          if (newStatus === 'Dibatalkan') {
+            patch.alasan_batal = updatedServerOrder?.alasan_batal ?? normalizedOptions.alasanBatal ?? o.alasan_batal;
+          }
+          if (newStatus === 'Selesai') {
+            patch.paymentStatus = 'dibayar';
+            patch.status_bayar = 'dibayar';
+          }
           return patch;
         }
         return o;
@@ -437,10 +459,15 @@ export default function App() {
       return updated;
     });
 
-    // 2. Sinkronkan perubahan status ke database Supabase
-    await updateOrderStatusOnServer(orderId, newStatus, trackingNumber, courier, alasanBatal);
+    // 3. Sinkronkan ulang orders (beserta order_status_history terbaru) dari Supabase
+    fetchOrders().then((fresh) => {
+      if (Array.isArray(fresh)) {
+        setOrders(fresh);
+        try { localStorage.setItem('kb_orders', JSON.stringify(fresh)); } catch {}
+      }
+    });
 
-    // 3. Jika pesanan menjadi Selesai, segarkan data produk agar angka "terjual" ikut ter-update otomatis
+    // 4. Jika pesanan menjadi Selesai, segarkan data produk agar angka "terjual" ikut ter-update otomatis
     if (newStatus === 'Selesai') {
       fetchProducts().then((loaded) => {
         if (Array.isArray(loaded)) setProducts(loaded);
@@ -448,6 +475,7 @@ export default function App() {
     }
 
     showToast(`Status pesanan #${orderId} berhasil diubah ke "${newStatus}"!`);
+    return { success: true, order: updatedServerOrder };
   };
 
   // Handle Order Placed successfully by Customer
@@ -584,7 +612,7 @@ export default function App() {
 
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
   const pendingOrdersCount = orders.filter(
-    (o) => o.status === 'Sedang Diproses' || o.status === 'Menunggu Pembayaran'
+    (o) => o.status === 'Dirajut' || o.status === 'Packing' || o.status === 'Diantar'
   ).length;
 
   // ── LOADING SCREEN saat auth belum selesai dicek ─────────────────────

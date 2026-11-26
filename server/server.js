@@ -371,7 +371,7 @@ app.post("/api/create-transaction", async (req, res) => {
         const orderNumber = `KB-${timestamp.toString().slice(-6)}`;
 
         // 1. Simpan data order ke tabel Supabase 'orders'
-        // Status otomatis langsung "Dikemas" & status_bayar "belum_dibayar"
+        // Status otomatis langsung "Dirajut" & payment_status "belum_dibayar"
         const { data: orderData, error: orderError } = await supabase
             .from("orders")
             .insert({
@@ -384,7 +384,7 @@ app.post("/api/create-transaction", async (req, res) => {
                 total: effectiveTotal,
                 payment_method: "COD",
                 payment_status: "belum_dibayar",
-                order_status: "Dikemas",
+                order_status: "Dirajut",
                 user_id: effectiveUserId
             })
             .select()
@@ -422,12 +422,12 @@ app.post("/api/create-transaction", async (req, res) => {
             }
         }
 
-        // 3. Catat riwayat awal ke order_status_history: Status langsung "Dikemas"
+        // 3. Catat riwayat awal ke order_status_history: Status langsung "Dirajut"
         try {
             await supabase.from("order_status_history").insert({
                 order_id: orderData.id,
-                status: "Dikemas",
-                keterangan: "Pesanan berhasil dibuat dengan metode pembayaran Tunai (COD). Pesanan otomatis masuk status Dikemas dan siap dirajut oleh perajin.",
+                status: "Dirajut",
+                keterangan: "Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.",
                 created_at: new Date().toISOString()
             });
         } catch (histErr) {
@@ -456,9 +456,9 @@ app.post("/api/create-transaction", async (req, res) => {
             subtotal: effectiveSubtotal,
             shippingCost: effectiveShipping,
             total: effectiveTotal,
-            status: "Dikemas",
+            status: "Dirajut",
             status_bayar: "belum_dibayar",
-            message: "Pesanan berhasil dibuat dan otomatis berstatus Dikemas (Metode: Tunai saat tiba)!"
+            message: "Pesanan berhasil dibuat dan otomatis berstatus Dirajut (Metode: COD saat diantar toko)!"
         });
 
     } catch (error) {
@@ -504,10 +504,11 @@ app.get("/api/orders", async (req, res) => {
 });
 
 // Update status pesanan (oleh Admin) dengan Validasi Alur Status Berurutan
+// Alur baru: Dirajut -> Packing -> Diantar -> Selesai (atau Dibatalkan)
 app.patch("/api/orders/:orderId/status", async (req, res) => {
     try {
         const { orderId } = req.params;
-        const { status, trackingNumber, courier, keterangan, alasan_batal } = req.body;
+        const { status, estimasi_antar, pengantar, keterangan, alasan_batal } = req.body;
 
         if (!status) {
             return res.status(400).json({
@@ -516,13 +517,52 @@ app.patch("/api/orders/:orderId/status", async (req, res) => {
             });
         }
 
+        const cleanEstimasi = (estimasi_antar || "").trim();
+        const cleanPengantar = (pengantar || "").trim();
+        const cleanAlasan = (alasan_batal || "").trim();
+
+        // 1. Utamakan RPC transaksional Supabase (update orders + insert order_status_history atomik)
+        try {
+            const { data: rpcOrder, error: rpcError } = await supabase.rpc("update_order_status_tx", {
+                p_order_id: String(orderId),
+                p_new_status: status,
+                p_estimasi_antar: cleanEstimasi || null,
+                p_pengantar: cleanPengantar || null,
+                p_alasan_batal: cleanAlasan || null
+            });
+
+            if (!rpcError && rpcOrder) {
+                return res.json({
+                    success: true,
+                    order: rpcOrder,
+                    message: `Status pesanan #${orderId} berhasil diubah menjadi "${status}".`
+                });
+            }
+
+            if (rpcError) {
+                const isMissingRpc =
+                    rpcError.code === "PGRST202" ||
+                    rpcError.code === "42883" ||
+                    (rpcError.message || "").toLowerCase().includes("could not find the function");
+                if (!isMissingRpc) {
+                    return res.status(400).json({
+                        success: false,
+                        code: 400,
+                        message: rpcError.message
+                    });
+                }
+            }
+        } catch (rpcErr) {
+            console.warn("Notice RPC update_order_status_tx fallback:", rpcErr.message);
+        }
+
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const queryField = uuidRegex.test(orderId) ? "id" : "order_number";
 
         // Ambil data pesanan saat ini untuk memeriksa status terkini
         const { data: currentOrder, error: findError } = await supabase
             .from("orders")
-            .select("id, order_status, no_resi, kurir, customer_name")
+            .select("id, order_status, estimasi_antar, pengantar, customer_name")
             .eq(queryField, orderId)
             .maybeSingle();
 
@@ -535,85 +575,56 @@ app.patch("/api/orders/:orderId/status", async (req, res) => {
             });
         }
 
-        // Normalisasi status saat ini
-        let currentStatus = currentOrder.order_status || "Dikemas";
-        if (currentStatus === "pending" || currentStatus === "Pesanan Diterima" || currentStatus === "Menunggu Pembayaran") currentStatus = "Dikemas";
-        if (currentStatus === "processing" || currentStatus === "Sedang Diproses") currentStatus = "Dikemas";
-        if (currentStatus === "shipped") currentStatus = "Dikirim";
-        if (currentStatus === "delivering" || currentStatus === "Diantar oleh Kurir") currentStatus = "Diantar Kurir";
-        if (currentStatus === "delivered" || currentStatus === "completed") currentStatus = "Selesai";
-        if (currentStatus === "cancelled") currentStatus = "Dibatalkan";
+        const currentStatus = currentOrder.order_status || "Dirajut";
 
         // 2. VALIDASI URUTAN STATUS DI SERVER (SERVER-SIDE STATE MACHINE VALIDATION)
-        // Admin tidak boleh melompati urutan status!
         const ALLOWED_TRANSITIONS = {
-            "Menunggu Pembayaran": ["Dikemas", "Dibatalkan"],
-            "Dikemas": ["Dikirim", "Dibatalkan"],
-            "Dikirim": ["Diantar Kurir"],
-            "Diantar Kurir": ["Selesai", "Dibatalkan"],
-            "Selesai": [], // Status tuntas
-            "Dibatalkan": [] // Status batal
+            "Dirajut": ["Packing", "Dibatalkan"],
+            "Packing": ["Diantar", "Dibatalkan"],
+            "Diantar": ["Selesai", "Dibatalkan"],
+            "Selesai": [],
+            "Dibatalkan": []
         };
 
         const allowedNextStatuses = ALLOWED_TRANSITIONS[currentStatus] || [];
-        const isTransitionAllowed = allowedNextStatuses.includes(status);
-
-        if (!isTransitionAllowed) {
+        if (!allowedNextStatuses.includes(status)) {
             return res.status(400).json({
                 success: false,
                 code: 400,
-                message: `Urutan status tidak valid! Pesanan saat ini berstatus "${currentStatus}" dan tidak dapat diubah menjadi "${status}". Alur status harus berurutan: Dikemas → Dikirim → Diantar Kurir → Selesai.`
+                message: `Urutan status tidak valid! Pesanan saat ini berstatus "${currentStatus}" dan tidak dapat diubah menjadi "${status}". Urutan wajib: Dirajut → Packing → Diantar → Selesai.`
             });
         }
 
-        // 3. Validasi khusus untuk status "Dibatalkan": WAJIB mengisi alasan
-        if (status === "Dibatalkan") {
-            if (!alasan_batal || !alasan_batal.trim()) {
-                return res.status(400).json({
-                    success: false,
-                    code: 400,
-                    message: "Alasan pembatalan wajib diisi saat membatalkan pesanan!"
-                });
-            }
+        // 3. Validasi input wajib
+        if (status === "Dibatalkan" && !cleanAlasan) {
+            return res.status(400).json({
+                success: false,
+                code: 400,
+                message: "Alasan pembatalan wajib diisi saat membatalkan pesanan!"
+            });
         }
 
-        // 4. Validasi khusus untuk status "Dikirim": WAJIB mengisi nomor resi dan nama kurir
-        if (status === "Dikirim") {
-            if (!trackingNumber || !trackingNumber.trim()) {
-                return res.status(400).json({
-                    success: false,
-                    code: 400,
-                    message: "Nomor resi pengiriman wajib diisi saat mengubah status ke 'Dikirim'!"
-                });
-            }
-            if (!courier || !courier.trim()) {
-                return res.status(400).json({
-                    success: false,
-                    code: 400,
-                    message: "Nama kurir ekspedisi wajib diisi saat mengubah status ke 'Dikirim'!"
-                });
-            }
+        if (status === "Diantar" && !cleanEstimasi) {
+            return res.status(400).json({
+                success: false,
+                code: 400,
+                message: "Estimasi waktu antar wajib diisi saat mengubah status ke 'Diantar'!"
+            });
         }
 
         // 4. Siapkan payload update
-        // Pada status "Selesai", pesanan otomatis ditandai sudah dibayar
         const updatePayload = {
             order_status: status,
             updated_at: new Date().toISOString()
         };
 
-        if (status === "Selesai") {
-            updatePayload.payment_status = "paid";
+        if (status === "Diantar") {
+            updatePayload.estimasi_antar = cleanEstimasi;
+            updatePayload.pengantar = cleanPengantar || null;
+        } else if (status === "Selesai") {
+            updatePayload.payment_status = "dibayar";
         } else if (status === "Dibatalkan") {
-            updatePayload.payment_status = "failed";
-            if (alasan_batal && alasan_batal.trim()) {
-                updatePayload.alasan_batal = alasan_batal.trim();
-            }
-        }
-
-        if (status === "Dikirim") {
-            updatePayload.no_resi = trackingNumber.trim();
-            updatePayload.kurir = courier.trim();
+            updatePayload.alasan_batal = cleanAlasan;
         }
 
         const { data: updatedData, error: updateError } = await supabase
@@ -625,31 +636,16 @@ app.patch("/api/orders/:orderId/status", async (req, res) => {
 
         if (updateError) throw updateError;
 
-        // Jika Selesai, perbarui juga tabel payments jika ada
-        if (status === "Selesai") {
-            try {
-                await supabase
-                    .from("payments")
-                    .update({
-                        transaction_status: "settlement",
-                        settlement_time: new Date().toISOString()
-                    })
-                    .eq("order_id", currentOrder.id);
-            } catch (pErr) {}
-        }
-
         // 5. Catat riwayat perubahan ke tabel order_status_history
         const historyDesc = keterangan || (
-            status === "Dikemas"
-                ? "Pesanan terdaftar (Metode: Tunai saat tiba). Tim perajin merajut dan menyiapkan pesanan dengan rapi."
-                : status === "Dikirim"
-                ? `Paket telah diserahkan ke kurir ${courier} dengan nomor resi ${trackingNumber}.`
-                : status === "Diantar Kurir"
-                ? `Paket sedang dibawa kurir ${updatedData?.courier || courier || currentOrder.courier || 'ekspedisi'} menuju alamat pengiriman pembeli.`
+            status === "Packing"
+                ? "Rajutan selesai! Pesanan sedang dikemas rapi oleh tim Knot & Bloom dan siap diantar."
+                : status === "Diantar"
+                ? `Pesanan sedang diantar langsung oleh tim Knot & Bloom. Estimasi tiba: ${cleanEstimasi}${cleanPengantar ? ` (Pengantar: ${cleanPengantar}).` : "."}`
                 : status === "Selesai"
-                ? "Pesanan telah sampai di tangan pembeli dan pembayaran tunai telah diterima lunas."
+                ? "Pesanan telah diterima pembeli dan pembayaran COD tunai telah dibayar lunas."
                 : status === "Dibatalkan"
-                ? `Pesanan dibatalkan. Alasan: ${alasan_batal || '-'}.`
+                ? `Pesanan dibatalkan. Alasan: ${cleanAlasan}.`
                 : `Status pesanan diubah menjadi ${status}.`
         );
 

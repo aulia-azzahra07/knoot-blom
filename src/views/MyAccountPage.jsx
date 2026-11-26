@@ -40,21 +40,21 @@ import {
   submitProductReview
 } from '../services/reviewService';
 
-// Contoh Pesanan Nyata & Interaktif untuk Pengguna Baru / Uji Coba Demo
+// Contoh Pesanan Demo (menggunakan alur status pengantaran toko: Dirajut -> Packing -> Diantar -> Selesai)
 const SAMPLE_DEMO_ORDERS = [
   {
     id: 'KB-2026-001',
     user_id: 'user-naila-1',
     date: '22 Nov 2026, 09:15 WIB',
     created_at: '2026-11-22T09:15:00.000Z',
-    status: 'Dikemas',
+    status: 'Dirajut',
     statusBadge: 'processing',
-    total: 85000,
+    total: 50000,
     shippingCost: 5000,
-    shippingMethod: 'Reguler Se-Palembang (Rp 5.000)',
-    courier: 'J&T Express Se-Palembang',
-    paymentMethod: 'QRIS Midtrans',
-    trackingNumber: 'KB-JNT-882194',
+    shippingMethod: 'Pengantaran Toko Se-Palembang (Rp 5.000)',
+    paymentMethod: 'COD',
+    estimasi_antar: '',
+    pengantar: '',
     customer: {
       name: 'Naila Alfathonah',
       phone: '08123456789',
@@ -63,35 +63,21 @@ const SAMPLE_DEMO_ORDERS = [
     items: [
       {
         id: 'p-1',
-        name: 'Bunga Tulip Rajut Cantik (Pink Pastel)',
+        name: 'Pouch Mini - Pink',
         price: 45000,
         quantity: 1,
-        image: '/images/tulip-keychain.jpg',
+        image: '',
         subtotal: 45000
-      },
-      {
-        id: 'p-2',
-        name: 'Gantungan Kunci Bintang Lucu',
-        price: 40000,
-        quantity: 1,
-        image: '/images/flower-scrunchie.jpg',
-        subtotal: 40000
       }
     ],
-    itemsSummary: 'Bunga Tulip Rajut Cantik (Pink Pastel) (x1), Gantungan Kunci Bintang Lucu (x1)',
-    notes: 'Mohon dibungkus gift box warna pink dan tambahkan kartu ucapan ulang tahun ♡',
+    itemsSummary: 'Pouch Mini - Pink (x1)',
+    notes: 'Mohon dibungkus rapi ya kak ♡',
     history: [
       {
         id: 'hist-1',
-        status: 'Menunggu Pembayaran',
-        keterangan: 'Pesanan dibuat. Menunggu konfirmasi pembayaran QRIS Midtrans.',
+        status: 'Dirajut',
+        keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
         created_at: '2026-11-22T09:15:00.000Z'
-      },
-      {
-        id: 'hist-2',
-        status: 'Dikemas',
-        keterangan: 'Pembayaran QRIS Rp 85.000 terverifikasi. Perajin mulai merajut helai benang katun pilihan di studio Unsri.',
-        created_at: '2026-11-22T10:30:00.000Z'
       }
     ]
   },
@@ -100,14 +86,14 @@ const SAMPLE_DEMO_ORDERS = [
     user_id: 'user-naila-1',
     date: '21 Nov 2026, 14:00 WIB',
     created_at: '2026-11-21T14:00:00.000Z',
-    status: 'Dikirim',
-    statusBadge: 'shipping',
-    total: 125000,
+    status: 'Diantar',
+    statusBadge: 'delivering',
+    total: 55500,
     shippingCost: 0,
-    shippingMethod: 'Gratis Ongkir Se-Palembang',
-    courier: 'Kurir Kampus Unsri / J&T Palembang',
-    paymentMethod: 'QRIS Midtrans',
-    trackingNumber: 'KB-EXP-772183',
+    shippingMethod: 'Gratis Ongkir Se-Palembang (Min. 50k)',
+    paymentMethod: 'COD',
+    estimasi_antar: 'Hari ini 15.00-17.00',
+    pengantar: 'Tim Studio Knot & Bloom',
     customer: {
       name: 'Naila Alfathonah',
       phone: '08123456789',
@@ -115,33 +101,33 @@ const SAMPLE_DEMO_ORDERS = [
     },
     items: [
       {
-        id: 'p-3',
-        name: 'Tas Rajut Mini Selempang Estetik',
-        price: 125000,
+        id: 'p-2',
+        name: 'Keychain Pita (x1), Hairband (x1)',
+        price: 55500,
         quantity: 1,
-        image: '/images/mini-crochet-bag.jpg',
-        subtotal: 125000
+        image: '',
+        subtotal: 55500
       }
     ],
-    itemsSummary: 'Tas Rajut Mini Selempang Estetik (x1)',
-    notes: 'Kirim saat jam kerja kantor ya kak',
+    itemsSummary: 'Keychain Pita (x1), Hairband (x1)',
+    notes: 'Antar sore hari ya kak',
     history: [
       {
-        id: 'hist-3',
-        status: 'Menunggu Pembayaran',
-        keterangan: 'Pesanan dibuat oleh pelanggan.',
+        id: 'hist-2',
+        status: 'Dirajut',
+        keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
         created_at: '2026-11-21T14:00:00.000Z'
       },
       {
-        id: 'hist-4',
-        status: 'Dikemas',
-        keterangan: 'Produk dirajut teliti, lolos QC 100%, dan dipasangi label Knot & Bloom.',
+        id: 'hist-3',
+        status: 'Packing',
+        keterangan: 'Rajutan selesai! Pesanan dikemas rapi dan siap diantar.',
         created_at: '2026-11-21T16:20:00.000Z'
       },
       {
-        id: 'hist-5',
-        status: 'Dikirim',
-        keterangan: 'Paket telah di-pickup oleh kurir ekspedisi. Nomor resi KB-EXP-772183 diterbitkan.',
+        id: 'hist-4',
+        status: 'Diantar',
+        keterangan: 'Pesanan sedang diantar langsung oleh tim Knot & Bloom. Estimasi tiba: Hari ini 15.00-17.00.',
         created_at: '2026-11-22T08:30:00.000Z'
       }
     ]
@@ -153,12 +139,12 @@ const SAMPLE_DEMO_ORDERS = [
     created_at: '2026-11-19T10:30:00.000Z',
     status: 'Selesai',
     statusBadge: 'completed',
-    total: 65000,
+    total: 35000,
     shippingCost: 5000,
-    shippingMethod: 'Reguler Se-Palembang (Rp 5.000)',
-    courier: 'Kurir Lokal Palembang (Bayu Pratama)',
-    paymentMethod: 'Tunai (COD)',
-    trackingNumber: 'KB-POS-449102',
+    shippingMethod: 'Pengantaran Toko Se-Palembang (Rp 5.000)',
+    paymentMethod: 'COD',
+    estimasi_antar: '19 Nov 15.00-16.00',
+    pengantar: 'Tim Studio Knot & Bloom',
     customer: {
       name: 'Naila Alfathonah',
       phone: '08123456789',
@@ -166,39 +152,39 @@ const SAMPLE_DEMO_ORDERS = [
     },
     items: [
       {
-        id: 'p-4',
-        name: 'DIY Crochet Kit Pemula Lengkap',
-        price: 65000,
+        id: 'p-3',
+        name: 'Hairband - Pink',
+        price: 30000,
         quantity: 1,
-        image: '/images/diy-crochet-kit.jpg',
-        subtotal: 65000
+        image: '',
+        subtotal: 30000
       }
     ],
-    itemsSummary: 'DIY Crochet Kit Pemula Lengkap (x1)',
-    notes: 'Paket sudah diterima dengan sangat rapi dan lengkap!',
+    itemsSummary: 'Hairband - Pink (x1)',
+    notes: 'Paket sudah diterima dengan sangat rapi!',
     history: [
       {
-        id: 'hist-6',
-        status: 'Menunggu Pembayaran',
-        keterangan: 'Pesanan tunai (COD) tercatat di sistem.',
+        id: 'hist-5',
+        status: 'Dirajut',
+        keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
         created_at: '2026-11-19T10:30:00.000Z'
       },
       {
-        id: 'hist-7',
-        status: 'Dikemas',
-        keterangan: 'Peralatan hakpen, benang wol, dan pola DIY kit dikemas rapi.',
+        id: 'hist-6',
+        status: 'Packing',
+        keterangan: 'Rajutan selesai! Pesanan dikemas rapi dan siap diantar.',
         created_at: '2026-11-19T11:45:00.000Z'
       },
       {
-        id: 'hist-8',
-        status: 'Dikirim',
-        keterangan: 'Kurir menuju alamat pengiriman Bukit Besar.',
+        id: 'hist-7',
+        status: 'Diantar',
+        keterangan: 'Pesanan sedang diantar langsung oleh tim Knot & Bloom menuju Bukit Besar.',
         created_at: '2026-11-19T14:10:00.000Z'
       },
       {
-        id: 'hist-9',
+        id: 'hist-8',
         status: 'Selesai',
-        keterangan: 'Paket telah diterima dengan baik oleh pembeli. Transaksi selesai.',
+        keterangan: 'Pesanan telah diterima pembeli dan pembayaran COD tunai telah dibayar lunas.',
         created_at: '2026-11-19T16:00:00.000Z'
       }
     ]
@@ -381,48 +367,32 @@ export default function MyAccountPage({
     return timeB - timeA;
   });
 
-  // Filter berdasarkan search keyword & status chip
+  // Filter berdasarkan search keyword & status chip (Dirajut, Packing, Diantar, Selesai, Dibatalkan)
   const filteredOrders = sortedOrdersPool.filter((order) => {
     const q = trackingSearch.toLowerCase().trim();
     const idMatch = String(order.id || '').toLowerCase().includes(q);
-    const resiMatch = String(order.trackingNumber || '').toLowerCase().includes(q);
     const summaryMatch = String(order.itemsSummary || '').toLowerCase().includes(q);
     const addressMatch = String(order.customer?.address || '').toLowerCase().includes(q);
-    const matchesSearch = !q || idMatch || resiMatch || summaryMatch || addressMatch;
+    const matchesSearch = !q || idMatch || summaryMatch || addressMatch;
 
     if (!matchesSearch) return false;
 
-    const st = (order.status || '').toLowerCase();
-    if (statusFilter === 'processing') {
-      return (
-        st.includes('diterima') ||
-        st.includes('kemas') ||
-        st.includes('proses') ||
-        st.includes('menunggu') ||
-        st.includes('pending')
-      );
-    }
-    if (statusFilter === 'shipping') {
-      return st.includes('kirim') || st.includes('perjalanan') || st.includes('antar');
-    }
-    if (statusFilter === 'completed') {
-      return st.includes('selesai') || st.includes('delivered') || st.includes('completed');
-    }
+    const st = (order.status || '').toLowerCase().trim();
+    if (statusFilter === 'dirajut') return st === 'dirajut';
+    if (statusFilter === 'packing') return st === 'packing';
+    if (statusFilter === 'diantar') return st === 'diantar' || st.includes('diantar');
+    if (statusFilter === 'selesai') return st === 'selesai';
+    if (statusFilter === 'dibatalkan') return st === 'dibatalkan';
     return true;
   });
 
   // Hitung status pesanan untuk statistik
   const activeOrdersCount = activeOrdersPool.filter(
-    (o) =>
-      o.status === 'Pesanan Diterima' ||
-      o.status === 'Dikemas' ||
-      o.status === 'Dikirim' ||
-      o.status === 'Sedang Diproses' ||
-      o.status === 'Menunggu Pembayaran'
+    (o) => o.status === 'Dirajut' || o.status === 'Packing' || o.status === 'Diantar'
   ).length;
 
   const completedOrdersCount = activeOrdersPool.filter(
-    (o) => o.status === 'Diantar oleh Kurir' || o.status === 'Selesai'
+    (o) => o.status === 'Selesai'
   ).length;
 
   const userName = currentUser?.name || 'Naila Alfathonah';
@@ -442,15 +412,6 @@ export default function MyAccountPage({
   const handleBackToOrderList = () => {
     setTrackingViewMode('list');
     setSelectedTrackingOrder(null);
-  };
-
-  // Handler Salin Resi
-  const handleCopyTrackingResi = (resiNum) => {
-    if (!resiNum) return;
-    navigator.clipboard.writeText(resiNum);
-    setCopiedResi(true);
-    if (showToast) showToast('Nomor resi berhasil disalin!');
-    setTimeout(() => setCopiedResi(false), 2000);
   };
 
   return (
@@ -678,29 +639,40 @@ export default function MyAccountPage({
                   ? selectedTrackingOrder.history
                   : [
                       {
-                        status: 'Pesanan Diterima',
-                        keterangan: 'Pesanan terdaftar di sistem Knot & Bloom Unsri.',
-                        created_at: selectedTrackingOrder.created_at || 'Hari Ini, 08:30 WIB'
+                        status: 'Dirajut',
+                        keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
+                        created_at: selectedTrackingOrder.created_at || selectedTrackingOrder.date
                       },
-                      ...(selectedTrackingOrder.status === 'Dikemas' || selectedTrackingOrder.status === 'Dikirim' || selectedTrackingOrder.status === 'Selesai'
+                      ...(selectedTrackingOrder.status === 'Packing' || selectedTrackingOrder.status === 'Diantar' || selectedTrackingOrder.status === 'Selesai'
                         ? [{
-                            status: 'Dikemas',
-                            keterangan: 'Produk dirajut manual dengan benang katun pilihan, lolos QC 100% dan dikemas gift box.',
-                            created_at: 'Hari Ini, 11:45 WIB'
+                            status: 'Packing',
+                            keterangan: 'Rajutan selesai! Pesanan dikemas rapi oleh tim Knot & Bloom dan siap diantar.',
+                            created_at: selectedTrackingOrder.date
                           }]
                         : []),
-                      ...(selectedTrackingOrder.status === 'Dikirim' || selectedTrackingOrder.status === 'Selesai'
+                      ...(selectedTrackingOrder.status === 'Diantar' || selectedTrackingOrder.status === 'Selesai'
                         ? [{
-                            status: 'Dikirim',
-                            keterangan: `Paket diserahkan ke kurir ${selectedTrackingOrder.courier || 'J&T Express'} (Resi: ${selectedTrackingOrder.trackingNumber || '-'}).`,
-                            created_at: 'Hari Ini, 14:10 WIB'
+                            status: 'Diantar',
+                            keterangan: `Pesanan diantar langsung oleh tim Knot & Bloom.${
+                              selectedTrackingOrder.estimasi_antar ? ` Estimasi: ${selectedTrackingOrder.estimasi_antar}.` : ''
+                            }${
+                              selectedTrackingOrder.pengantar ? ` Pengantar: ${selectedTrackingOrder.pengantar}.` : ''
+                            }`,
+                            created_at: selectedTrackingOrder.date
                           }]
                         : []),
                       ...(selectedTrackingOrder.status === 'Selesai'
                         ? [{
                             status: 'Selesai',
-                            keterangan: 'Paket telah sampai dan diserahterimakan dengan baik ke alamat penerima.',
-                            created_at: 'Hari Ini, 16:30 WIB'
+                            keterangan: 'Pesanan telah diterima pembeli dan pembayaran tunai (COD) telah dibayar lunas.',
+                            created_at: selectedTrackingOrder.date
+                          }]
+                        : []),
+                      ...(selectedTrackingOrder.status === 'Dibatalkan'
+                        ? [{
+                            status: 'Dibatalkan',
+                            keterangan: `Pesanan dibatalkan. Alasan: ${selectedTrackingOrder.alasan_batal || '-'}`,
+                            created_at: selectedTrackingOrder.date
                           }]
                         : [])
                     ];
@@ -724,11 +696,13 @@ export default function MyAccountPage({
                         </span>
                         <span
                           className={`order-status-badge ${
-                            selectedTrackingOrder.status === 'Dikemas' || selectedTrackingOrder.status === 'Sedang Diproses'
+                            selectedTrackingOrder.status === 'Dirajut'
                               ? 'status-processing'
-                              : selectedTrackingOrder.status === 'Dikirim'
+                              : selectedTrackingOrder.status === 'Packing'
                               ? 'status-shipping'
-                              : selectedTrackingOrder.status === 'Diantar oleh Kurir' || selectedTrackingOrder.status === 'Selesai'
+                              : selectedTrackingOrder.status === 'Diantar'
+                              ? 'status-shipping'
+                              : selectedTrackingOrder.status === 'Selesai'
                               ? 'status-completed'
                               : selectedTrackingOrder.status === 'Dibatalkan'
                               ? 'status-cancelled'
@@ -740,44 +714,17 @@ export default function MyAccountPage({
                       </div>
                     </div>
 
-                    {/* Informasi Pengiriman, Kurir & Resi (Khusus jika sudah dikirim) */}
-                    {(selectedTrackingOrder.status === 'Dikirim' || selectedTrackingOrder.status === 'Selesai' || selectedTrackingOrder.trackingNumber) && (
-                      <div className="courier-resi-highlight-banner fade-in">
-                        <div className="courier-icon-wrap">
-                          <Truck size={24} color="#1D4ED8" />
-                        </div>
-                        <div className="courier-text-info">
-                          <h6>Kurir Pengiriman: <strong>{selectedTrackingOrder.courier || 'J&T Express Se-Palembang'}</strong></h6>
-                          <div className="resi-code-row">
-                            <span>Nomor Resi:</span>
-                            <code className="resi-code-badge">{selectedTrackingOrder.trackingNumber || 'KB-JNT-882194'}</code>
-                            <button
-                              type="button"
-                              className="btn-copy-resi-inline"
-                              onClick={() => handleCopyTrackingResi(selectedTrackingOrder.trackingNumber || 'KB-JNT-882194')}
-                              title="Salin Nomor Resi"
-                            >
-                              {copiedResi ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-                              <span>{copiedResi ? 'Tersalin!' : 'Salin Resi'}</span>
-                            </button>
-                          </div>
-                        </div>
-                        <div className="courier-badge-tag">
-                          <span>Estimasi Tiba: 1 Hari Kerja (Se-Palembang)</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Komponen Visual Stepper & Simulasi Kurir Bergerak */}
+                    {/* Komponen Visual Stepper 4 Tahap: Dirajut, Packing, Diantar, Selesai */}
                     <OrderTrackingStepper
                       status={selectedTrackingOrder.status}
-                      trackingNumber={selectedTrackingOrder.trackingNumber}
                       orderDate={selectedTrackingOrder.date}
                       orderId={selectedTrackingOrder.id}
-                      shippingMethod={selectedTrackingOrder.shippingMethod || 'Reguler Se-Palembang'}
                       customerAddress={selectedTrackingOrder.customer?.address}
                       customerName={selectedTrackingOrder.customer?.name}
-                      items={selectedTrackingOrder.items || []}
+                      estimasiAntar={selectedTrackingOrder.estimasi_antar}
+                      pengantar={selectedTrackingOrder.pengantar}
+                      alasanBatal={selectedTrackingOrder.alasan_batal}
+                      total={selectedTrackingOrder.total}
                       onChatOrder={() => {
                         if (!currentUser) {
                           const nav = onNavigate || _onNavigate;
@@ -788,14 +735,11 @@ export default function MyAccountPage({
                         setCurrentTab('chat');
                         setTrackingViewMode('list');
                       }}
-                      onConfirmDelivery={
-                        onUpdateOrderStatus
-                          ? (oid) => {
-                              onUpdateOrderStatus(oid, 'Selesai', selectedTrackingOrder.trackingNumber);
-                              setSelectedTrackingOrder((prev) => ({ ...prev, status: 'Selesai' }));
-                              if (showToast) {
-                                showToast(`Pesanan #${oid} berhasil dikonfirmasi diterima!`);
-                              }
+                      onScrollToReview={
+                        selectedTrackingOrder.status === 'Selesai' && selectedTrackingOrder.dbId
+                          ? () => {
+                              const el = document.getElementById('order-review-section');
+                              if (el) el.scrollIntoView({ behavior: 'smooth' });
                             }
                           : null
                       }
@@ -951,7 +895,7 @@ export default function MyAccountPage({
 
                     {/* FORM KIRIM ULASAN (Hanya tampil jika pesanan berstatus 'Selesai') */}
                     {selectedTrackingOrder.status === 'Selesai' && selectedTrackingOrder.dbId && (
-                      <div className="order-review-section">
+                      <div id="order-review-section" className="order-review-section">
                         <div className="card-head-simple" style={{ marginBottom: '14px' }}>
                           <Star size={18} color="#FFB703" fill="#FFB703" />
                           <h5>Beri Ulasan Produk Pesanan Ini</h5>
@@ -1092,7 +1036,7 @@ export default function MyAccountPage({
                       <Search size={18} className="search-input-icon" />
                       <input
                         type="text"
-                        placeholder="Cari berdasarkan No. Pesanan (#KB...), Resi, atau nama produk..."
+                        placeholder="Cari berdasarkan No. Pesanan (#KB...) atau nama produk..."
                         value={trackingSearch}
                         onChange={(e) => setTrackingSearch(e.target.value)}
                         className="tracking-search-input"
@@ -1119,24 +1063,38 @@ export default function MyAccountPage({
                       </button>
                       <button
                         type="button"
-                        className={`filter-chip ${statusFilter === 'processing' ? 'active' : ''}`}
-                        onClick={() => setStatusFilter('processing')}
+                        className={`filter-chip ${statusFilter === 'dirajut' ? 'active' : ''}`}
+                        onClick={() => setStatusFilter('dirajut')}
                       >
-                        <span>Sedang Dirajut / Dikemas</span>
+                        <span>Dirajut</span>
                       </button>
                       <button
                         type="button"
-                        className={`filter-chip ${statusFilter === 'shipping' ? 'active' : ''}`}
-                        onClick={() => setStatusFilter('shipping')}
+                        className={`filter-chip ${statusFilter === 'packing' ? 'active' : ''}`}
+                        onClick={() => setStatusFilter('packing')}
                       >
-                        <span>Dalam Pengiriman</span>
+                        <span>Packing</span>
                       </button>
                       <button
                         type="button"
-                        className={`filter-chip ${statusFilter === 'completed' ? 'active' : ''}`}
-                        onClick={() => setStatusFilter('completed')}
+                        className={`filter-chip ${statusFilter === 'diantar' ? 'active' : ''}`}
+                        onClick={() => setStatusFilter('diantar')}
                       >
-                        <span>Selesai Diterima</span>
+                        <span>Diantar</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`filter-chip ${statusFilter === 'selesai' ? 'active' : ''}`}
+                        onClick={() => setStatusFilter('selesai')}
+                      >
+                        <span>Selesai</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`filter-chip ${statusFilter === 'dibatalkan' ? 'active' : ''}`}
+                        onClick={() => setStatusFilter('dibatalkan')}
+                      >
+                        <span>Dibatalkan</span>
                       </button>
                     </div>
 
@@ -1202,11 +1160,11 @@ export default function MyAccountPage({
                               <div className="order-right-meta">
                                 <span
                                   className={`order-status-badge ${
-                                    order.status === 'Dikemas' || order.status === 'Sedang Diproses'
+                                    order.status === 'Dirajut'
                                       ? 'status-processing'
-                                      : order.status === 'Dikirim'
+                                      : order.status === 'Packing' || order.status === 'Diantar'
                                       ? 'status-shipping'
-                                      : order.status === 'Diantar oleh Kurir' || order.status === 'Selesai'
+                                      : order.status === 'Selesai'
                                       ? 'status-completed'
                                       : order.status === 'Dibatalkan'
                                       ? 'status-cancelled'
@@ -1242,9 +1200,9 @@ export default function MyAccountPage({
                                   type="button"
                                   className="btn-open-detail-tracking-main"
                                   onClick={() => handleOpenTrackingDetail(order)}
-                                  title="Buka rincian lengkap timeline tracking & rute kurir"
+                                  title="Buka rincian lengkap status & timeline pesanan"
                                 >
-                                  <Truck size={15} />
+                                  <Package size={15} />
                                   <span>Lacak Pesanan →</span>
                                 </button>
 

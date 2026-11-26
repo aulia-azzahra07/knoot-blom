@@ -144,9 +144,10 @@ export default function AdminPortalPage({
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState(null);
-  const [selectedOrderForResi, setSelectedOrderForResi] = useState(null);
-  const [inputResi, setInputResi] = useState('');
-  const [inputCourier, setInputCourier] = useState('J&T Express Se-Palembang');
+  const [selectedOrderForDelivery, setSelectedOrderForDelivery] = useState(null);
+  const [inputEstimasiAntar, setInputEstimasiAntar] = useState('');
+  const [inputPengantar, setInputPengantar] = useState('');
+  const [isUpdatingStatusOrderId, setIsUpdatingStatusOrderId] = useState(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [orderToCancel, setOrderToCancel] = useState(null);
   const [inputAlasanBatal, setInputAlasanBatal] = useState('');
@@ -166,28 +167,28 @@ export default function AdminPortalPage({
     .filter((o) => o.status !== 'Dibatalkan')
     .reduce((sum, o) => sum + (o.total || 0), 0);
 
-  // COD Status: Dikemas, Dikirim, Diantar Kurir, Selesai, Dibatalkan
-  const packingOrders = orders.filter((o) => o.status === 'Dikemas');
-  const shippingOrders = orders.filter((o) => o.status === 'Dikirim');
-  const deliveringOrders = orders.filter((o) => o.status === 'Diantar Kurir');
+  // Alur Status Baru COD Pengantaran Toko: Dirajut -> Packing -> Diantar -> Selesai (atau Dibatalkan)
+  const knittingOrders = orders.filter((o) => o.status === 'Dirajut');
+  const packingOrders = orders.filter((o) => o.status === 'Packing');
+  const deliveringOrders = orders.filter((o) => o.status === 'Diantar');
   const completedOrders = orders.filter((o) => o.status === 'Selesai');
   const cancelledOrders = orders.filter((o) => o.status === 'Dibatalkan');
-  const pendingOrders = [...packingOrders, ...shippingOrders, ...deliveringOrders];
+  const pendingOrders = [...knittingOrders, ...packingOrders, ...deliveringOrders];
 
   // Filtered orders
   const filteredOrders = orders.filter((order) => {
     const matchesFilter =
       orderStatusFilter === 'all'
         ? true
-        : orderStatusFilter === 'packing'
-          ? order.status === 'Dikemas'
-          : orderStatusFilter === 'shipping'
-            ? order.status === 'Dikirim'
-            : orderStatusFilter === 'delivering'
-              ? order.status === 'Diantar Kurir'
-              : orderStatusFilter === 'completed'
+        : orderStatusFilter === 'dirajut'
+          ? order.status === 'Dirajut'
+          : orderStatusFilter === 'packing'
+            ? order.status === 'Packing'
+            : orderStatusFilter === 'diantar'
+              ? order.status === 'Diantar'
+              : orderStatusFilter === 'selesai'
                 ? order.status === 'Selesai'
-                : orderStatusFilter === 'cancelled'
+                : orderStatusFilter === 'dibatalkan'
                   ? order.status === 'Dibatalkan'
                   : true;
 
@@ -212,11 +213,11 @@ export default function AdminPortalPage({
   // Status badge class
   const getStatusBadgeClass = (status) => {
     switch (status) {
-      case 'Dikemas':
+      case 'Dirajut':
         return 'badge-processing';
-      case 'Dikirim':
+      case 'Packing':
         return 'badge-shipping';
-      case 'Diantar Kurir':
+      case 'Diantar':
         return 'badge-delivering';
       case 'Selesai':
         return 'badge-completed';
@@ -314,7 +315,7 @@ export default function AdminPortalPage({
               <div className="metric-info">
                 <span className="metric-label">Pesanan Perlu Diproses</span>
                 <h3 className="metric-value">{pendingOrders.length} Pesanan</h3>
-                <span className="metric-hint">Perlu dirajut & disiapkan packing</span>
+                <span className="metric-hint">{knittingOrders.length} Dirajut • {packingOrders.length} Packing</span>
               </div>
             </div>
 
@@ -323,9 +324,9 @@ export default function AdminPortalPage({
                 <Truck size={24} />
               </div>
               <div className="metric-info">
-                <span className="metric-label">Sedang Dalam Pengiriman</span>
-                <h3 className="metric-value">{shippingOrders.length} Paket</h3>
-                <span className="metric-hint">Kurir JNE / J&T / Instant Palembang</span>
+                <span className="metric-label">Sedang Diantar Toko</span>
+                <h3 className="metric-value">{deliveringOrders.length} Pesanan</h3>
+                <span className="metric-hint">Pengantaran langsung COD oleh tim toko</span>
               </div>
             </div>
 
@@ -430,7 +431,7 @@ export default function AdminPortalPage({
                   className="quick-action-tile"
                   onClick={() => {
                     setActiveTab('orders');
-                    setOrderStatusFilter('processing');
+                    setOrderStatusFilter('dirajut');
                   }}
                 >
                   <div className="action-tile-icon">
@@ -438,7 +439,7 @@ export default function AdminPortalPage({
                   </div>
                   <div className="action-tile-text">
                     <strong>Pesanan Perlu Diproses ({pendingOrders.length})</strong>
-                    <span>Lihat detail pesanan dan update nomor resi pengiriman</span>
+                    <span>Lihat detail pesanan dan perbarui tahap pengerjaan</span>
                   </div>
                 </button>
 
@@ -499,32 +500,32 @@ export default function AdminPortalPage({
                 Semua ({orders.length})
               </button>
               <button
+                className={`filter-pill ${orderStatusFilter === 'dirajut' ? 'active' : ''}`}
+                onClick={() => setOrderStatusFilter('dirajut')}
+              >
+                Dirajut ({knittingOrders.length})
+              </button>
+              <button
                 className={`filter-pill ${orderStatusFilter === 'packing' ? 'active' : ''}`}
                 onClick={() => setOrderStatusFilter('packing')}
               >
-                Dikemas ({packingOrders.length})
+                Packing ({packingOrders.length})
               </button>
               <button
-                className={`filter-pill ${orderStatusFilter === 'shipping' ? 'active' : ''}`}
-                onClick={() => setOrderStatusFilter('shipping')}
+                className={`filter-pill ${orderStatusFilter === 'diantar' ? 'active' : ''}`}
+                onClick={() => setOrderStatusFilter('diantar')}
               >
-                Dikirim ({shippingOrders.length})
+                Diantar ({deliveringOrders.length})
               </button>
               <button
-                className={`filter-pill ${orderStatusFilter === 'delivering' ? 'active' : ''}`}
-                onClick={() => setOrderStatusFilter('delivering')}
-              >
-                Diantar Kurir ({deliveringOrders.length})
-              </button>
-              <button
-                className={`filter-pill ${orderStatusFilter === 'completed' ? 'active' : ''}`}
-                onClick={() => setOrderStatusFilter('completed')}
+                className={`filter-pill ${orderStatusFilter === 'selesai' ? 'active' : ''}`}
+                onClick={() => setOrderStatusFilter('selesai')}
               >
                 Selesai ({completedOrders.length})
               </button>
               <button
-                className={`filter-pill ${orderStatusFilter === 'cancelled' ? 'active' : ''}`}
-                onClick={() => setOrderStatusFilter('cancelled')}
+                className={`filter-pill ${orderStatusFilter === 'dibatalkan' ? 'active' : ''}`}
+                onClick={() => setOrderStatusFilter('dibatalkan')}
               >
                 Dibatalkan ({cancelledOrders.length})
               </button>
@@ -657,18 +658,25 @@ export default function AdminPortalPage({
                             </span>
                           </div>
                           <div className="detail-row">
-                            <span className="detail-label">Pengiriman:</span>
+                            <span className="detail-label">Pengantaran:</span>
                             <span className="detail-val">
-                              {order.shippingMethod || 'Reguler Se-Palembang'}
+                              {order.shippingMethod || 'Pengantaran Langsung Toko'}
                             </span>
                           </div>
 
-                          {order.trackingNumber && (
+                          {order.estimasi_antar && (
                             <div className="detail-row resi-row">
-                              <span className="detail-label">No. Resi:</span>
-                              <strong className="detail-val resi-code">
-                                {order.trackingNumber}
+                              <span className="detail-label">Estimasi Antar:</span>
+                              <strong className="detail-val">
+                                {order.estimasi_antar}
                               </strong>
+                            </div>
+                          )}
+
+                          {order.pengantar && (
+                            <div className="detail-row">
+                              <span className="detail-label">Pengantar:</span>
+                              <span className="detail-val">{order.pengantar}</span>
                             </div>
                           )}
 
@@ -779,52 +787,74 @@ export default function AdminPortalPage({
                       {order.status !== 'Selesai' && order.status !== 'Dibatalkan' && (
                         <div className="cod-collect-notice">
                           <Banknote size={15} />
-                          <strong>Tagihan COD Kurir: {formatRupiah(order.total)}</strong>
+                          <strong>Tagihan COD: {formatRupiah(order.total)}</strong>
                         </div>
                       )}
 
                       <div className="status-update-buttons">
-                        {/* Dikemas → Tombol Kirim (buka modal resi+kurir) */}
-                        {order.status === 'Dikemas' && (
+                        {/* Tahap 1: Dirajut -> Mulai Packing */}
+                        {order.status === 'Dirajut' && (
                           <button
                             className="btn-sm btn-primary-pink"
-                            onClick={() => {
-                              setSelectedOrderForResi(order);
-                              setInputResi('');
-                              setInputCourier('J&T Express Se-Palembang');
+                            disabled={isUpdatingStatusOrderId === order.id}
+                            onClick={async () => {
+                              setIsUpdatingStatusOrderId(order.id);
+                              try {
+                                await onUpdateOrderStatus(order.id, 'Packing');
+                              } finally {
+                                setIsUpdatingStatusOrderId(null);
+                              }
                             }}
                           >
-                            <Truck size={15} />
-                            <span>Kirim Pesanan</span>
+                            <Package size={15} />
+                            <span>
+                              {isUpdatingStatusOrderId === order.id ? 'Memproses...' : 'Mulai Packing'}
+                            </span>
                           </button>
                         )}
 
-                        {/* Dikirim → Tandai Diantar Kurir */}
-                        {order.status === 'Dikirim' && (
+                        {/* Tahap 2: Packing -> Antar Pesanan (buka modal estimasi_antar + pengantar) */}
+                        {order.status === 'Packing' && (
                           <button
                             className="btn-sm btn-blue"
-                            onClick={() => onUpdateOrderStatus(order.id, 'Diantar Kurir', order.trackingNumber, order.courier || '')}
+                            disabled={isUpdatingStatusOrderId === order.id}
+                            onClick={() => {
+                              setSelectedOrderForDelivery(order);
+                              setInputEstimasiAntar(order.estimasi_antar || '');
+                              setInputPengantar(order.pengantar || '');
+                            }}
                           >
                             <Navigation size={15} />
-                            <span>Tandai Diantar Kurir</span>
+                            <span>Antar Pesanan</span>
                           </button>
                         )}
 
-                        {/* Diantar Kurir → Tandai Selesai */}
-                        {order.status === 'Diantar Kurir' && (
+                        {/* Tahap 3: Diantar -> Tandai Selesai */}
+                        {order.status === 'Diantar' && (
                           <button
                             className="btn-sm btn-mint"
-                            onClick={() => onUpdateOrderStatus(order.id, 'Selesai', order.trackingNumber, order.courier || '')}
+                            disabled={isUpdatingStatusOrderId === order.id}
+                            onClick={async () => {
+                              setIsUpdatingStatusOrderId(order.id);
+                              try {
+                                await onUpdateOrderStatus(order.id, 'Selesai');
+                              } finally {
+                                setIsUpdatingStatusOrderId(null);
+                              }
+                            }}
                           >
                             <CheckCircle2 size={15} />
-                            <span>Tandai Selesai (COD Lunas)</span>
+                            <span>
+                              {isUpdatingStatusOrderId === order.id ? 'Memproses...' : 'Tandai Selesai'}
+                            </span>
                           </button>
                         )}
 
-                        {/* Dikemas atau Diantar Kurir → Batalkan */}
-                        {(order.status === 'Dikemas' || order.status === 'Diantar Kurir') && (
+                        {/* Dibatalkan: boleh dari Dirajut, Packing, atau Diantar (wajib isi alasan) */}
+                        {(order.status === 'Dirajut' || order.status === 'Packing' || order.status === 'Diantar') && (
                           <button
                             className="btn-sm btn-outline-danger"
+                            disabled={isUpdatingStatusOrderId === order.id}
                             onClick={() => {
                               setOrderToCancel(order);
                               setInputAlasanBatal('');
@@ -836,9 +866,9 @@ export default function AdminPortalPage({
                           </button>
                         )}
 
-                        {/* Final state badges */}
+                        {/* Final state badges (tidak dapat diubah lagi) */}
                         {order.status === 'Selesai' && (
-                          <span className="status-pill badge-completed">✓ Selesai — COD Lunas</span>
+                          <span className="status-pill badge-completed">✓ Selesai — COD Dibayar</span>
                         )}
                         {order.status === 'Dibatalkan' && (
                           <div>
@@ -1058,8 +1088,8 @@ export default function AdminPortalPage({
                   </div>
                   <ul className="role-permissions-list">
                     <li>✓ <strong>Melihat semua pesanan/order yang masuk</strong> secara live</li>
-                    <li>✓ <strong>Memperbarui status pesanan</strong> (Sedang Diproses → Dikirim → Selesai)</li>
-                    <li>✓ <strong>Input nomor resi</strong> ekspedisi (JNE, J&T, Grab, dll)</li>
+                    <li>✓ <strong>Memperbarui status pesanan</strong> (Dirajut → Packing → Diantar → Selesai)</li>
+                    <li>✓ <strong>Atur estimasi waktu antar & nama pengantar</strong> langsung oleh toko</li>
                     <li>✓ <strong>Hubungi pembeli langsung</strong> via WhatsApp resmi</li>
                     <li>✓ <strong>Cetak label packing & invoice</strong> pesanan</li>
                     <li>✓ <strong>Tambah produk baru</strong> (foto, harga, varian warna, spesifikasi)</li>
@@ -1164,66 +1194,78 @@ export default function AdminPortalPage({
       )}
 
 
-      {/* MODAL 2: INPUT RESI PENGIRIMAN */}
-      {selectedOrderForResi && (
-        <div className="modal-overlay-custom fade-in" onClick={() => setSelectedOrderForResi(null)}>
+      {/* MODAL 2: ANTAR PESANAN (PENGANTARAN LANGSUNG TOKO) */}
+      {selectedOrderForDelivery && (
+        <div className="modal-overlay-custom fade-in" onClick={() => setSelectedOrderForDelivery(null)}>
           <div className="modal-dialog-custom modal-sm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom">
-              <h3>🚚 Kirim Pesanan & Input Resi</h3>
-              <button className="btn-close-modal" onClick={() => setSelectedOrderForResi(null)}>
+              <h3>🛵 Antar Pesanan #{selectedOrderForDelivery.id}</h3>
+              <button className="btn-close-modal" onClick={() => setSelectedOrderForDelivery(null)}>
                 ✕
               </button>
             </div>
             <div className="modal-body-custom">
               <p className="modal-desc-text">
-                Pesanan <strong>#{selectedOrderForResi.id}</strong> ({selectedOrderForResi.customer?.name}).
-                Status akan diubah menjadi <strong>"Dikirim"</strong>.
+                Pembeli: <strong>{selectedOrderForDelivery.customer?.name}</strong><br />
+                Status akan diubah dari <strong>Packing</strong> menjadi <strong>"Diantar"</strong>.
               </p>
 
               <div className="form-group-custom">
-                <label>Nomor Resi *</label>
+                <label>
+                  Estimasi Waktu Antar <span style={{ color: '#DC2626' }}>* (wajib diisi)</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="Contoh: KB-JNE-8829104 / JT123456789"
-                  value={inputResi}
-                  onChange={(e) => setInputResi(e.target.value)}
+                  placeholder="Contoh: Hari ini 15.00-17.00"
+                  value={inputEstimasiAntar}
+                  onChange={(e) => setInputEstimasiAntar(e.target.value)}
                   autoFocus
                 />
               </div>
 
               <div className="form-group-custom" style={{ marginTop: '12px' }}>
-                <label>Nama Kurir / Ekspedisi *</label>
-                <select
-                  value={inputCourier}
-                  onChange={(e) => setInputCourier(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E5E7EB', fontSize: '14px' }}
-                >
-                  <option value="J&T Express Se-Palembang">J&T Express Se-Palembang</option>
-                  <option value="JNE Reguler">JNE Reguler</option>
-                  <option value="Kurir Kampus Unsri">Kurir Kampus Unsri</option>
-                  <option value="Kurir Lokal Palembang">Kurir Lokal Palembang</option>
-                  <option value="SiCepat Reguler">SiCepat Reguler</option>
-                  <option value="AnterAja">AnterAja</option>
-                </select>
+                <label>Nama Pengantar (opsional)</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Kak Naila / Tim Studio"
+                  value={inputPengantar}
+                  onChange={(e) => setInputPengantar(e.target.value)}
+                />
               </div>
             </div>
             <div className="modal-footer-custom">
               <button
                 className="btn-secondary"
-                onClick={() => setSelectedOrderForResi(null)}
+                onClick={() => setSelectedOrderForDelivery(null)}
               >
                 Batal
               </button>
               <button
                 className="btn-primary"
-                onClick={() => {
-                  const resiValue = inputResi.trim() || `KB-EXP-${Date.now().toString().slice(-6)}`;
-                  onUpdateOrderStatus(selectedOrderForResi.id, 'Dikirim', resiValue, inputCourier);
-                  setSelectedOrderForResi(null);
-                  showToast(`Pesanan #${selectedOrderForResi.id} berhasil dikirim via ${inputCourier} dengan resi ${resiValue}!`);
+                disabled={isUpdatingStatusOrderId === selectedOrderForDelivery.id}
+                onClick={async () => {
+                  if (!inputEstimasiAntar.trim()) {
+                    showToast('Estimasi waktu antar wajib diisi!');
+                    return;
+                  }
+                  const targetOrder = selectedOrderForDelivery;
+                  setIsUpdatingStatusOrderId(targetOrder.id);
+                  try {
+                    const res = await onUpdateOrderStatus(targetOrder.id, 'Diantar', {
+                      estimasiAntar: inputEstimasiAntar.trim(),
+                      pengantar: inputPengantar.trim()
+                    });
+                    if (res?.success) {
+                      setSelectedOrderForDelivery(null);
+                    }
+                  } finally {
+                    setIsUpdatingStatusOrderId(null);
+                  }
                 }}
               >
-                Simpan & Ubah Status ke Dikirim
+                {isUpdatingStatusOrderId === selectedOrderForDelivery.id
+                  ? 'Menyimpan...'
+                  : 'Simpan & Ubah ke Diantar'}
               </button>
             </div>
           </div>
@@ -1259,18 +1301,28 @@ export default function AdminPortalPage({
               <button
                 className="btn-primary"
                 style={{ background: '#DC2626' }}
-                onClick={() => {
+                disabled={isUpdatingStatusOrderId === orderToCancel.id}
+                onClick={async () => {
                   if (!inputAlasanBatal.trim()) {
                     showToast('Alasan pembatalan wajib diisi!');
                     return;
                   }
-                  onUpdateOrderStatus(orderToCancel.id, 'Dibatalkan', '', '', inputAlasanBatal.trim());
-                  setIsCancelModalOpen(false);
-                  setOrderToCancel(null);
-                  showToast(`Pesanan #${orderToCancel.id} telah dibatalkan.`);
+                  const targetOrder = orderToCancel;
+                  setIsUpdatingStatusOrderId(targetOrder.id);
+                  try {
+                    const res = await onUpdateOrderStatus(targetOrder.id, 'Dibatalkan', {
+                      alasanBatal: inputAlasanBatal.trim()
+                    });
+                    if (res?.success) {
+                      setIsCancelModalOpen(false);
+                      setOrderToCancel(null);
+                    }
+                  } finally {
+                    setIsUpdatingStatusOrderId(null);
+                  }
                 }}
               >
-                Ya, Batalkan Pesanan
+                {isUpdatingStatusOrderId === orderToCancel.id ? 'Memproses...' : 'Ya, Batalkan Pesanan'}
               </button>
             </div>
           </div>
@@ -1282,7 +1334,7 @@ export default function AdminPortalPage({
         <div className="modal-overlay-custom fade-in" onClick={() => setSelectedOrderForInvoice(null)}>
           <div className="modal-dialog-custom modal-invoice" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom">
-              <h3>📄 Label Pengiriman & Invoice Pesanan</h3>
+              <h3>📄 Label Pengantaran & Invoice Pesanan</h3>
               <button className="btn-close-modal" onClick={() => setSelectedOrderForInvoice(null)}>
                 ✕
               </button>
@@ -1349,9 +1401,12 @@ export default function AdminPortalPage({
                     <div className="slip-payment-method">
                       <span>Metode Pembayaran:</span>
                       <strong>{selectedOrderForInvoice.paymentMethod}</strong>
-                      <p>Ekspedisi: {selectedOrderForInvoice.shippingMethod || 'Reguler'}</p>
-                      {selectedOrderForInvoice.trackingNumber && (
-                        <p>No. Resi: <strong>{selectedOrderForInvoice.trackingNumber}</strong></p>
+                      <p>Pengantaran: {selectedOrderForInvoice.shippingMethod || 'Pengantaran Langsung Toko'}</p>
+                      {selectedOrderForInvoice.estimasi_antar && (
+                        <p>Estimasi Antar: <strong>{selectedOrderForInvoice.estimasi_antar}</strong></p>
+                      )}
+                      {selectedOrderForInvoice.pengantar && (
+                        <p>Pengantar: <strong>{selectedOrderForInvoice.pengantar}</strong></p>
                       )}
                     </div>
                     <div className="slip-calc-lines">

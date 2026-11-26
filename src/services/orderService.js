@@ -58,39 +58,38 @@ const resolveOrderItemImage = (item, productImagesMap = { byId: {}, byName: {} }
 
 /**
  * Format data pesanan dari Supabase agar sesuai dengan struktur yang ditampilkan di Admin Portal & Akun Pembeli
+ * Alur Status: Dirajut -> Packing -> Diantar -> Selesai (atau Dibatalkan)
  */
 export const mapSupabaseOrderToUi = (o, productImagesMap = {}) => {
-  let statusLabel = 'Dikemas';
+  let statusLabel = 'Dirajut';
   let statusBadge = 'processing';
 
-  const orderStatus = (o.order_status || o.status || '').toLowerCase();
-  const paymentStatus = (o.payment_status || '').toLowerCase();
+  const orderStatus = (o.order_status || o.status || '').toLowerCase().trim();
 
-  if (orderStatus === 'cancelled' || orderStatus === 'dibatalkan' || paymentStatus === 'failed') {
+  if (orderStatus === 'dibatalkan' || orderStatus === 'cancelled') {
     statusLabel = 'Dibatalkan';
     statusBadge = 'cancelled';
   } else if (orderStatus === 'selesai' || orderStatus === 'completed' || orderStatus === 'delivered') {
     statusLabel = 'Selesai';
     statusBadge = 'completed';
-  } else if (
-    orderStatus === 'diantar kurir' ||
-    orderStatus === 'diantar' ||
-    orderStatus === 'delivering' ||
-    orderStatus.includes('diantar')
-  ) {
-    statusLabel = 'Diantar Kurir';
+  } else if (orderStatus === 'diantar' || orderStatus.includes('diantar') || orderStatus === 'delivering') {
+    statusLabel = 'Diantar';
     statusBadge = 'delivering';
-  } else if (orderStatus === 'shipped' || orderStatus === 'dikirim') {
-    statusLabel = 'Dikirim';
-    statusBadge = 'shipping';
+  } else if (orderStatus === 'packing' || orderStatus === 'dikirim' || orderStatus === 'shipped') {
+    statusLabel = 'Packing';
+    statusBadge = 'packing';
   } else {
-    // Alur Baru Tunai: Status awal otomatis "Dikemas"
-    statusLabel = 'Dikemas';
+    // Status awal otomatis untuk pesanan baru: Dirajut
+    statusLabel = 'Dirajut';
     statusBadge = 'processing';
   }
 
-  // Status bayar: 'belum_dibayar' atau 'dibayar' (otomatis dibayar jika status Selesai)
-  const statusBayar = o.status_bayar || (statusLabel === 'Selesai' || paymentStatus === 'paid' ? 'dibayar' : 'belum_dibayar');
+  const paymentStatus = (o.payment_status || '').toLowerCase();
+  const statusBayar =
+    o.status_bayar ||
+    (statusLabel === 'Selesai' || paymentStatus === 'dibayar' || paymentStatus === 'paid'
+      ? 'dibayar'
+      : 'belum_dibayar');
 
   const createdDate = o.created_at ? new Date(o.created_at) : new Date();
   const dateFormatted =
@@ -125,7 +124,7 @@ export const mapSupabaseOrderToUi = (o, productImagesMap = {}) => {
   const cost = Number(o.shipping_cost) || 0;
   const shippingDesc = cost === 0
     ? 'Gratis Ongkir Se-Palembang (Min. 50k)'
-    : `Reguler Se-Palembang (Rp ${cost.toLocaleString('id-ID')})`;
+    : `Pengantaran Toko Se-Palembang (Rp ${cost.toLocaleString('id-ID')})`;
 
   const rawHistory = Array.isArray(o.order_status_history) && o.order_status_history.length > 0
     ? [...o.order_status_history].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
@@ -144,11 +143,11 @@ export const mapSupabaseOrderToUi = (o, productImagesMap = {}) => {
     shippingCost: cost,
     total: Number(o.total) || 0,
     shippingMethod: shippingDesc,
-    paymentMethod: o.payment_method || 'Tunai',
-    paymentStatus: o.payment_status || 'pending',
+    paymentMethod: o.payment_method || 'COD',
+    paymentStatus: statusLabel === 'Selesai' ? 'dibayar' : (o.payment_status || 'belum_dibayar'),
     status_bayar: statusBayar,
-    trackingNumber: o.no_resi || o.tracking_number || '',
-    courier: o.kurir || o.courier || '',
+    estimasi_antar: o.estimasi_antar || '',
+    pengantar: o.pengantar || '',
     customer: {
       name: o.customer_name || 'Pelanggan',
       phone: o.phone || '-',
@@ -390,7 +389,7 @@ export const createCashOrderDirectly = async ({
     total: verifiedTotal,
     payment_method: 'COD',
     payment_status: 'belum_dibayar',
-    order_status: 'Dikemas',
+    order_status: 'Dirajut',
     user_id: authenticatedUserId
   };
 
@@ -433,8 +432,8 @@ export const createCashOrderDirectly = async ({
   // ── STEP 4: Catat riwayat awal ke order_status_history ───────────────────
   const { error: histError } = await supabase.from('order_status_history').insert({
     order_id: orderData.id,
-    status: 'Dikemas',
-    keterangan: 'Pesanan COD berhasil dibuat. Perajin Knot & Bloom mulai menyiapkan pesanan.',
+    status: 'Dirajut',
+    keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
     created_at: new Date().toISOString()
   });
 
@@ -452,16 +451,61 @@ export const createCashOrderDirectly = async ({
     subtotal: verifiedSubtotal,
     shippingCost: verifiedShippingCost,
     total: verifiedTotal,
-    status: 'Dikemas',
+    status: 'Dirajut',
     status_bayar: 'belum_dibayar'
   };
 };
 
+const ALLOWED_ORDER_TRANSITIONS = {
+  Dirajut: ['Packing', 'Dibatalkan'],
+  Packing: ['Diantar', 'Dibatalkan'],
+  Diantar: ['Selesai', 'Dibatalkan'],
+  Selesai: [],
+  Dibatalkan: []
+};
+
 /**
- * Memperbarui status pesanan di database Supabase (dengan validasi alur dan histori)
+ * Memperbarui status pesanan di database Supabase secara transaksional & tervalidasi server.
+ * Urutan wajib: Dirajut -> Packing -> Diantar -> Selesai (atau Dibatalkan dengan alasan wajib).
  */
-export const updateOrderStatusOnServer = async (orderId, newStatus, trackingNumber = '', courier = '', alasanBatal = '') => {
-  // 1. Prioritaskan panggil backend Express API agar tervalidasi di server
+export const updateOrderStatusOnServer = async (orderId, newStatus, options = {}) => {
+  const { estimasiAntar = '', pengantar = '', alasanBatal = '' } = options || {};
+  const cleanEstimasi = String(estimasiAntar || '').trim();
+  const cleanPengantar = String(pengantar || '').trim();
+  const cleanAlasan = String(alasanBatal || '').trim();
+
+  // 1. Prioritas Utama: Supabase Transactional RPC (update orders + insert order_status_history dalam 1 transaksi)
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('update_order_status_tx', {
+      p_order_id: String(orderId),
+      p_new_status: newStatus,
+      p_estimasi_antar: cleanEstimasi || null,
+      p_pengantar: cleanPengantar || null,
+      p_alasan_batal: cleanAlasan || null
+    });
+
+    if (!rpcError && rpcData) {
+      return { success: true, order: rpcData };
+    }
+
+    if (rpcError) {
+      const isMissingRpc =
+        rpcError.code === 'PGRST202' ||
+        rpcError.code === '42883' ||
+        (rpcError.message || '').toLowerCase().includes('could not find the function');
+
+      if (!isMissingRpc) {
+        // Error validasi server (urutan status salah / input wajib kosong / akses ditolak) -> hentikan!
+        console.error('[OrderService] Validasi RPC gagal:', rpcError);
+        return { success: false, message: rpcError.message || 'Gagal memperbarui status pesanan.' };
+      }
+      console.warn('[OrderService] RPC update_order_status_tx belum tersedia, beralih ke API/fallback:', rpcError.message);
+    }
+  } catch (rpcCatch) {
+    console.warn('[OrderService] Gagal memanggil RPC:', rpcCatch.message);
+  }
+
+  // 2. Prioritas Kedua: Backend Express API (server-side state machine validation)
   try {
     const res = await fetch(`${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}/status`, {
       method: 'PATCH',
@@ -470,74 +514,105 @@ export const updateOrderStatusOnServer = async (orderId, newStatus, trackingNumb
       },
       body: JSON.stringify({
         status: newStatus,
-        trackingNumber,
-        courier,
-        alasan_batal: alasanBatal
+        estimasi_antar: cleanEstimasi,
+        pengantar: cleanPengantar,
+        alasan_batal: cleanAlasan
       })
     });
 
     const data = await res.json();
     if (res.ok && data.success) {
       return data;
-    } else if (!res.ok) {
-      return { success: false, message: data.message || 'Gagal mengubah status di server.' };
     }
+    return { success: false, message: data.message || 'Gagal mengubah status di server.' };
   } catch (err) {
     console.warn('Backend API tidak merespons, beralih ke fallback Supabase:', err.message);
   }
 
-  // 2. Fallback update langsung ke database Supabase
+  // 3. Fallback langsung ke Supabase (tetap validasi urutan status terhadap data DB saat ini)
   try {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const queryField = uuidRegex.test(orderId) ? 'id' : 'order_number';
+
+    const { data: currentOrder, error: findErr } = await supabase
+      .from('orders')
+      .select('id, order_status')
+      .eq(queryField, orderId)
+      .maybeSingle();
+
+    if (findErr || !currentOrder) {
+      return { success: false, message: `Pesanan #${orderId} tidak ditemukan.` };
+    }
+
+    const currentStatus = currentOrder.order_status || 'Dirajut';
+    const allowedNext = ALLOWED_ORDER_TRANSITIONS[currentStatus] || [];
+    if (!allowedNext.includes(newStatus)) {
+      return {
+        success: false,
+        message: `Urutan status tidak valid: "${currentStatus}" tidak bisa diubah ke "${newStatus}".`
+      };
+    }
+
+    if (newStatus === 'Diantar' && !cleanEstimasi) {
+      return { success: false, message: 'Estimasi waktu antar wajib diisi.' };
+    }
+    if (newStatus === 'Dibatalkan' && !cleanAlasan) {
+      return { success: false, message: 'Alasan pembatalan wajib diisi.' };
+    }
+
     const updatePayload = {
       order_status: newStatus,
       updated_at: new Date().toISOString()
     };
 
-    if (newStatus === 'Selesai') {
-      updatePayload.payment_status = 'paid';
+    if (newStatus === 'Diantar') {
+      updatePayload.estimasi_antar = cleanEstimasi;
+      updatePayload.pengantar = cleanPengantar || null;
+    } else if (newStatus === 'Selesai') {
+      updatePayload.payment_status = 'dibayar';
     } else if (newStatus === 'Dibatalkan') {
-      updatePayload.payment_status = 'failed';
-      if (alasanBatal && alasanBatal.trim()) {
-        updatePayload.alasan_batal = alasanBatal.trim();
-      }
+      updatePayload.alasan_batal = cleanAlasan;
     }
-
-    if (newStatus === 'Dikirim') {
-      if (trackingNumber) updatePayload.no_resi = trackingNumber;
-      if (courier) updatePayload.kurir = courier;
-    }
-
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const queryField = uuidRegex.test(orderId) ? 'id' : 'order_number';
 
     const { data, error } = await supabase
       .from('orders')
       .update(updatePayload)
-      .eq(queryField, orderId)
+      .eq('id', currentOrder.id)
       .select()
       .maybeSingle();
 
-    if (!error && data) {
-      // Catat ke order_status_history
-      try {
-        await supabase.from('order_status_history').insert({
-          order_id: data.id,
-          status: newStatus,
-          keterangan: newStatus === 'Selesai'
-            ? 'Paket telah diterima dengan baik oleh pembeli dan pembayaran tunai telah lunas diselesaikan.'
-            : newStatus === 'Diantar Kurir'
-            ? 'Paket sedang dibawa kurir menuju alamat pengiriman pembeli.'
-            : newStatus === 'Dikirim'
-            ? `Paket telah diserahkan ke kurir ${courier || 'ekspedisi'} dengan nomor resi ${trackingNumber}.`
-            : `Status pesanan diubah menjadi ${newStatus}.`,
-          created_at: new Date().toISOString()
-        });
-      } catch (histErr) {}
+    if (error) {
+      console.error('[OrderService] Gagal update orders:', error);
+      return { success: false, message: error.message || 'Gagal memperbarui status pesanan.' };
+    }
+
+    if (data) {
+      const keterangan =
+        newStatus === 'Packing'
+          ? 'Rajutan selesai! Pesanan sedang dikemas rapi oleh tim Knot & Bloom dan siap diantar.'
+          : newStatus === 'Diantar'
+          ? `Pesanan sedang diantar langsung oleh tim Knot & Bloom. Estimasi tiba: ${cleanEstimasi}${cleanPengantar ? ` (Pengantar: ${cleanPengantar}).` : '.'}`
+          : newStatus === 'Selesai'
+          ? 'Pesanan telah diterima pembeli dan pembayaran COD tunai telah dibayar lunas.'
+          : newStatus === 'Dibatalkan'
+          ? `Pesanan dibatalkan. Alasan: ${cleanAlasan}`
+          : `Status pesanan diubah menjadi ${newStatus}.`;
+
+      const { error: histErr } = await supabase.from('order_status_history').insert({
+        order_id: data.id,
+        status: newStatus,
+        keterangan,
+        created_at: new Date().toISOString()
+      });
+      if (histErr) {
+        console.warn('[OrderService] Gagal mencatat order_status_history:', histErr.message);
+      }
 
       return { success: true, order: data };
     }
   } catch (err) {
-    console.warn('Gagal update status langsung di Supabase:', err.message);
+    console.error('Gagal update status langsung di Supabase:', err);
+    return { success: false, message: err.message || 'Gagal memperbarui status pesanan.' };
   }
 
   return { success: false, message: 'Gagal memperbarui status pesanan.' };

@@ -202,8 +202,8 @@ export default function CheckoutPage({
         total: finalTotal,
         paymentMethod: 'COD',
         paymentStatus: 'belum_dibayar',
-        orderStatus: 'Dikemas',
-        status: 'Dikemas',
+        orderStatus: 'Dirajut',
+        status: 'Dirajut',
         customer: {
           name: fullName.trim(),
           phone: phone.trim(),
@@ -371,8 +371,8 @@ export default function CheckoutPage({
                       readOnly
                     />
                     <div>
-                      <strong>Pengiriman Seluruh Kota Palembang</strong>
-                      <p>Diantar aman oleh kurir lokal / ekspedisi terpercaya langsung ke alamatmu</p>
+                      <strong>Pengantaran Langsung Toko Se-Palembang</strong>
+                      <p>Diantar langsung oleh tim Knot & Bloom dengan aman sampai ke alamatmu</p>
                     </div>
                   </div>
                   <span className={`shipping-price-tag ${isFreeShipping ? 'price-free-tag' : ''}`}>
@@ -433,7 +433,7 @@ export default function CheckoutPage({
                     Bayar di Tempat (COD — Cash on Delivery)
                   </strong>
                   <p style={{ color: '#166534', fontSize: '13px', margin: 0, lineHeight: 1.6 }}>
-                    Siapkan uang tunai <strong>pas</strong> saat kurir tiba di depan pintumu. Pembayaran dilakukan langsung kepada kurir — tidak perlu transfer atau scan QRIS!
+                    Siapkan uang tunai <strong>pas</strong> saat pengantar Knot & Bloom tiba di depan pintumu. Pembayaran dilakukan langsung saat barang diterima — tidak perlu transfer atau scan QRIS!
                   </p>
                 </div>
               </div>
@@ -508,7 +508,7 @@ export default function CheckoutPage({
               <span>
                 {isProcessing
                   ? "Memproses Pesanan..."
-                  : "Buat Pesanan (COD — Bayar Saat Kurir Tiba)"}
+                  : "Buat Pesanan (COD — Bayar Saat Pesanan Diantar)"}
               </span>
               <CheckCircle2 size={20} />
             </button>
@@ -534,19 +534,18 @@ export default function CheckoutPage({
               Nomor Pesanan: <strong>#{completedOrder.id}</strong>
             </p>
             <p className="order-submsg">
-              Terima kasih, {completedOrder.customer.name}! Tim Knot & Bloom Unsri akan segera merajut dan menyiapkan pesananmu dengan sepenuh hati.
+              Terima kasih, {completedOrder.customer.name}! Tim Knot & Bloom akan segera merajut pesananmu dengan sepenuh hati.
             </p>
 
-            {/* Visual Tracking Stepper: Step 1 (Pesanan Diterima) */}
+            {/* Visual Tracking Stepper: Step 1 (Dirajut) */}
             <div style={{ margin: '18px 0', textAlign: 'left' }}>
               <OrderTrackingStepper
-                status={completedOrder.status || 'Pesanan Diterima'}
+                status={completedOrder.status || 'Dirajut'}
                 orderDate={completedOrder.date}
                 orderId={completedOrder.id}
-                shippingMethod={completedOrder.shippingCost === 0 ? 'Gratis Ongkir Se-Palembang' : 'Reguler Se-Palembang (Rp 5.000)'}
                 customerAddress={completedOrder.customer?.address}
                 customerName={completedOrder.customer?.name}
-                items={completedOrder.items || []}
+                total={completedOrder.total}
                 compact={true}
               />
             </div>
@@ -555,7 +554,7 @@ export default function CheckoutPage({
             <div className="payment-instruction-box">
               <div className="instr-header">
                 <Banknote size={20} color="#10B981" />
-                <h4>Metode: COD (Bayar Tunai ke Kurir)</h4>
+                <h4>Metode: COD (Bayar Tunai Saat Pesanan Diantar)</h4>
               </div>
 
               <div
@@ -582,10 +581,10 @@ export default function CheckoutPage({
                   }}
                 >
                   <Banknote size={20} />
-                  <span>Siapkan Uang Tunai Pas Saat Kurir Tiba!</span>
+                  <span>Siapkan Uang Tunai Pas Saat Pengantar Tiba!</span>
                 </div>
                 <p style={{ color: '#166534', fontSize: '13px', margin: 0, lineHeight: 1.5 }}>
-                  Siapkan uang tunai pas sebesar <strong>{formatRupiah(completedOrder.total)}</strong> untuk dibayarkan langsung ke kurir saat paket tiba di depan pintumu ya!
+                  Siapkan uang tunai pas sebesar <strong>{formatRupiah(completedOrder.total)}</strong> untuk dibayarkan langsung saat pesanan diantar ke alamatmu ya!
                 </p>
                 <div
                   style={{
