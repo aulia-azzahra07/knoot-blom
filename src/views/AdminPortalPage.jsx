@@ -140,8 +140,8 @@ export default function AdminPortalPage({
     };
   }, []);
 
-  // Orders State
-  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  // Orders State (tab aktif default: 'dirajut')
+  const [orderStatusFilter, setOrderStatusFilter] = useState('dirajut');
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState(null);
   const [selectedOrderForDelivery, setSelectedOrderForDelivery] = useState(null);
@@ -175,22 +175,18 @@ export default function AdminPortalPage({
   const cancelledOrders = orders.filter((o) => o.status === 'Dibatalkan');
   const pendingOrders = [...knittingOrders, ...packingOrders, ...deliveringOrders];
 
-  // Filtered orders
+  const STATUS_TAB_LABELS = {
+    dirajut: 'Dirajut',
+    packing: 'Packing',
+    diantar: 'Diantar',
+    selesai: 'Selesai',
+    dibatalkan: 'Dibatalkan'
+  };
+  const activeStatusLabel = STATUS_TAB_LABELS[orderStatusFilter] || 'Dirajut';
+
+  // Filtered orders (hanya menampilkan pesanan sesuai tab status aktif + pencarian di dalam tab aktif)
   const filteredOrders = orders.filter((order) => {
-    const matchesFilter =
-      orderStatusFilter === 'all'
-        ? true
-        : orderStatusFilter === 'dirajut'
-          ? order.status === 'Dirajut'
-          : orderStatusFilter === 'packing'
-            ? order.status === 'Packing'
-            : orderStatusFilter === 'diantar'
-              ? order.status === 'Diantar'
-              : orderStatusFilter === 'selesai'
-                ? order.status === 'Selesai'
-                : orderStatusFilter === 'dibatalkan'
-                  ? order.status === 'Dibatalkan'
-                  : true;
+    const matchesFilter = order.status === activeStatusLabel;
 
     const query = orderSearchQuery.toLowerCase().trim();
     const matchesSearch =
@@ -394,6 +390,8 @@ export default function AdminPortalPage({
                         <button
                           className="btn-sm btn-outline-pink"
                           onClick={() => {
+                            const targetTab = (order.status || 'Dirajut').toLowerCase();
+                            setOrderStatusFilter(STATUS_TAB_LABELS[targetTab] ? targetTab : 'dirajut');
                             setActiveTab('orders');
                             setOrderSearchQuery(order.id);
                           }}
@@ -494,12 +492,6 @@ export default function AdminPortalPage({
 
             <div className="status-filter-pills">
               <button
-                className={`filter-pill ${orderStatusFilter === 'all' ? 'active' : ''}`}
-                onClick={() => setOrderStatusFilter('all')}
-              >
-                Semua ({orders.length})
-              </button>
-              <button
                 className={`filter-pill ${orderStatusFilter === 'dirajut' ? 'active' : ''}`}
                 onClick={() => setOrderStatusFilter('dirajut')}
               >
@@ -592,17 +584,26 @@ export default function AdminPortalPage({
           {filteredOrders.length === 0 ? (
             <div className="empty-state-box">
               <ShoppingBag size={48} color="#FF86C1" />
-              <h3>Tidak ada pesanan ditemukan</h3>
-              <p>Coba ganti filter status atau kata kunci pencarian Anda.</p>
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  setOrderStatusFilter('all');
-                  setOrderSearchQuery('');
-                }}
-              >
-                Reset Filter
-              </button>
+              <h3>
+                {orderSearchQuery
+                  ? `Tidak ada pesanan yang cocok di tahap ${activeStatusLabel}`
+                  : orderStatusFilter === 'dibatalkan'
+                  ? 'Belum ada pesanan yang Dibatalkan'
+                  : `Belum ada pesanan di tahap ${activeStatusLabel}`}
+              </h3>
+              <p>
+                {orderSearchQuery
+                  ? `Tidak ditemukan pesanan dengan kata kunci "${orderSearchQuery}" pada tab ${activeStatusLabel}.`
+                  : 'Pesanan pada tahap ini akan otomatis muncul di sini saat statusnya diperbarui.'}
+              </p>
+              {orderSearchQuery && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => setOrderSearchQuery('')}
+                >
+                  Hapus Pencarian
+                </button>
+              )}
             </div>
           ) : (
             <div className="admin-orders-list">
@@ -1148,6 +1149,9 @@ export default function AdminPortalPage({
             chatRequestKey={chatRequestKey}
             onClearAttachedOrder={() => setChatTargetOrder(null)}
             onViewOrder={(orderId) => {
+              const target = orders.find((o) => String(o.id) === String(orderId));
+              const targetTab = (target?.status || 'Dirajut').toLowerCase();
+              setOrderStatusFilter(STATUS_TAB_LABELS[targetTab] ? targetTab : 'dirajut');
               setActiveTab('orders');
               setOrderSearchQuery(orderId);
             }}
