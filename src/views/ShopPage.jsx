@@ -17,7 +17,9 @@ export default function ShopPage({
   const PRICE_STEP = 5000;
 
   const [selectedCategory, setSelectedCategory] = useState(
-    initialCategory && initialCategory !== 'diy-kit' ? initialCategory : 'all'
+    initialCategory && initialCategory !== 'diy-kit' && initialCategory !== 'alat-benang'
+      ? initialCategory
+      : 'all'
   );
   const [minPrice, setMinPrice] = useState(PRICE_MIN_LIMIT);
   const [maxPrice, setMaxPrice] = useState(PRICE_MAX_LIMIT);

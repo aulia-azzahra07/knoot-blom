@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Sparkles, Heart, Smile, ShoppingBag, Scissors, Star, User } from 'lucide-react';
+import { ArrowRight, Sparkles, Heart, Smile, ShoppingBag, Star, User } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 import { CATEGORIES } from '../data/products';
 
@@ -39,8 +39,6 @@ export default function HomePage({
         return <ShoppingBag size={24} color="#0284C7" />;
       case 'Heart':
         return <Heart size={24} color="#059669" />;
-      case 'Scissors':
-        return <Scissors size={24} color="#EA580C" />;
       default:
         return <Sparkles size={24} color="#FF86C1" />;
     }
