@@ -10,7 +10,7 @@ export const CATEGORIES = [
 // Semua halaman (Home, Shop, Detail Produk, Keranjang, Checkout) mengambil produk dari tabel `products` di Supabase.
 export const PRODUCTS = [];
 
-// Ulasan tidak lagi menggunakan data dummy — diambil langsung dari tabel `reviews` di Supabase.
+// Ulasan diambil langsung dari tabel `reviews` di Supabase.
 export const TESTIMONIALS = [];
 
 export const BLOG_POSTS = [

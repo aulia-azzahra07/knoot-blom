@@ -40,159 +40,10 @@ import {
   submitProductReview
 } from '../services/reviewService';
 
-// Contoh Pesanan Demo (menggunakan alur status pengantaran toko: Dirajut -> Packing -> Diantar -> Selesai)
-const SAMPLE_DEMO_ORDERS = [
-  {
-    id: 'KB-2026-001',
-    user_id: 'user-naila-1',
-    date: '22 Nov 2026, 09:15 WIB',
-    created_at: '2026-11-22T09:15:00.000Z',
-    status: 'Dirajut',
-    statusBadge: 'processing',
-    total: 50000,
-    shippingCost: 5000,
-    shippingMethod: 'Pengantaran Toko Se-Palembang (Rp 5.000)',
-    paymentMethod: 'COD',
-    estimasi_antar: '',
-    pengantar: '',
-    customer: {
-      name: 'Naila Alfathonah',
-      phone: '08123456789',
-      address: 'Jl. Srijaya Negara, Bukit Besar, Ilir Barat I, Palembang'
-    },
-    items: [
-      {
-        id: 'p-1',
-        name: 'Pouch Mini - Pink',
-        price: 45000,
-        quantity: 1,
-        image: '',
-        subtotal: 45000
-      }
-    ],
-    itemsSummary: 'Pouch Mini - Pink (x1)',
-    notes: 'Mohon dibungkus rapi ya kak ♡',
-    history: [
-      {
-        id: 'hist-1',
-        status: 'Dirajut',
-        keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
-        created_at: '2026-11-22T09:15:00.000Z'
-      }
-    ]
-  },
-  {
-    id: 'KB-2026-002',
-    user_id: 'user-naila-1',
-    date: '21 Nov 2026, 14:00 WIB',
-    created_at: '2026-11-21T14:00:00.000Z',
-    status: 'Diantar',
-    statusBadge: 'delivering',
-    total: 55500,
-    shippingCost: 0,
-    shippingMethod: 'Gratis Ongkir Se-Palembang (Min. 50k)',
-    paymentMethod: 'COD',
-    estimasi_antar: 'Hari ini 15.00-17.00',
-    pengantar: 'Tim Studio Knot & Bloom',
-    customer: {
-      name: 'Naila Alfathonah',
-      phone: '08123456789',
-      address: 'Komplek Dosen Unsri Indralaya, Ogan Ilir, Sumatera Selatan'
-    },
-    items: [
-      {
-        id: 'p-2',
-        name: 'Keychain Pita (x1), Hairband (x1)',
-        price: 55500,
-        quantity: 1,
-        image: '',
-        subtotal: 55500
-      }
-    ],
-    itemsSummary: 'Keychain Pita (x1), Hairband (x1)',
-    notes: 'Antar sore hari ya kak',
-    history: [
-      {
-        id: 'hist-2',
-        status: 'Dirajut',
-        keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
-        created_at: '2026-11-21T14:00:00.000Z'
-      },
-      {
-        id: 'hist-3',
-        status: 'Packing',
-        keterangan: 'Rajutan selesai! Pesanan dikemas rapi dan siap diantar.',
-        created_at: '2026-11-21T16:20:00.000Z'
-      },
-      {
-        id: 'hist-4',
-        status: 'Diantar',
-        keterangan: 'Pesanan sedang diantar langsung oleh tim Knot & Bloom. Estimasi tiba: Hari ini 15.00-17.00.',
-        created_at: '2026-11-22T08:30:00.000Z'
-      }
-    ]
-  },
-  {
-    id: 'KB-2026-003',
-    user_id: 'user-naila-1',
-    date: '19 Nov 2026, 10:30 WIB',
-    created_at: '2026-11-19T10:30:00.000Z',
-    status: 'Selesai',
-    statusBadge: 'completed',
-    total: 35000,
-    shippingCost: 5000,
-    shippingMethod: 'Pengantaran Toko Se-Palembang (Rp 5.000)',
-    paymentMethod: 'COD',
-    estimasi_antar: '19 Nov 15.00-16.00',
-    pengantar: 'Tim Studio Knot & Bloom',
-    customer: {
-      name: 'Naila Alfathonah',
-      phone: '08123456789',
-      address: 'Jl. Padang Selasa No. 12, Bukit Besar, Palembang'
-    },
-    items: [
-      {
-        id: 'p-3',
-        name: 'Hairband - Pink',
-        price: 30000,
-        quantity: 1,
-        image: '',
-        subtotal: 30000
-      }
-    ],
-    itemsSummary: 'Hairband - Pink (x1)',
-    notes: 'Paket sudah diterima dengan sangat rapi!',
-    history: [
-      {
-        id: 'hist-5',
-        status: 'Dirajut',
-        keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
-        created_at: '2026-11-19T10:30:00.000Z'
-      },
-      {
-        id: 'hist-6',
-        status: 'Packing',
-        keterangan: 'Rajutan selesai! Pesanan dikemas rapi dan siap diantar.',
-        created_at: '2026-11-19T11:45:00.000Z'
-      },
-      {
-        id: 'hist-7',
-        status: 'Diantar',
-        keterangan: 'Pesanan sedang diantar langsung oleh tim Knot & Bloom menuju Bukit Besar.',
-        created_at: '2026-11-19T14:10:00.000Z'
-      },
-      {
-        id: 'hist-8',
-        status: 'Selesai',
-        keterangan: 'Pesanan telah diterima pembeli dan pembayaran COD tunai telah dibayar lunas.',
-        created_at: '2026-11-19T16:00:00.000Z'
-      }
-    ]
-  }
-];
-
 export default function MyAccountPage({
   userOrders,
+  ordersError = null,
+  onRetryOrders = null,
   wishlist,
   allProducts,
   onSelectProduct,
@@ -326,8 +177,7 @@ export default function MyAccountPage({
 
   // Filter & Search Pelacakan Pesanan
   const [trackingSearch, setTrackingSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'processing' | 'shipping' | 'completed'
-  const [forceShowDemo, setForceShowDemo] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const toggleOrderExpand = (orderId) => {
     setExpandedOrderIds((prev) => ({
@@ -348,19 +198,12 @@ export default function MyAccountPage({
   const loggedInUserId = currentUser?.id || null;
   const isCustomerRole = currentUser?.role === 'customer';
 
-  // Saring pesanan dari database: hanya yang user_id nya sesuai dengan akun yang login
+  // Saring pesanan dari database: hanya yang user_id-nya sesuai dengan akun yang login
   const authorizedUserOrders = loggedInUserId
-    ? rawOrdersList.filter((o) => {
-        if (!o.user_id && !o.userId) return true; // Pesanan lokal sesi saat ini
-        return o.user_id === loggedInUserId || o.userId === loggedInUserId;
-      })
+    ? rawOrdersList.filter((o) => o.user_id === loggedInUserId || o.userId === loggedInUserId)
     : [];
 
-  // Tampilkan demo pesanan jika list pesanan kosong atau tombol demo diaktifkan
-  const isUsingDemo = authorizedUserOrders.length === 0 || forceShowDemo;
-  const activeOrdersPool = isUsingDemo
-    ? (authorizedUserOrders.length > 0 ? [...authorizedUserOrders, ...SAMPLE_DEMO_ORDERS] : SAMPLE_DEMO_ORDERS)
-    : authorizedUserOrders;
+  const activeOrdersPool = authorizedUserOrders;
 
   // Urutkan selalu dari yang terbaru (created_at DESC)
   const sortedOrdersPool = [...activeOrdersPool].sort((a, b) => {
@@ -431,7 +274,7 @@ export default function MyAccountPage({
               <span className="profile-email">{userEmail}</span>
               <div className="profile-badge">
                 <Sparkles size={13} color="#E63985" />
-                <span>Pelanggan Setia Unsri</span>
+                <span>{currentUser?.role === 'admin' ? 'Admin Toko' : 'Anggota Knot & Bloom'}</span>
               </div>
             </div>
           </div>
@@ -1013,21 +856,44 @@ export default function MyAccountPage({
                     <div>
                       <h3>Pesanan Saya ♡</h3>
                       <p className="meta-info-text">
-                        Daftar seluruh pesanan Anda diurutkan dari yang terbaru (Terhubung langsung ke database Supabase)
+                        Daftar seluruh pesanan Anda diurutkan dari yang terbaru.
                       </p>
                     </div>
                     <div className="head-badge-right-group">
-                      {authorizedUserOrders.length === 0 && (
-                        <span className="demo-preview-pill">
-                          <Sparkles size={13} />
-                          Mode Demo Interaktif
-                        </span>
-                      )}
                       <span className="orders-count-badge">
                         {filteredOrders.length} dari {activeOrdersPool.length} Pesanan
                       </span>
                     </div>
                   </div>
+
+                  {ordersError && (
+                    <div
+                      style={{
+                        background: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        borderRadius: '12px',
+                        padding: '12px 16px',
+                        marginBottom: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        color: '#991B1B',
+                        fontSize: '0.88rem'
+                      }}
+                    >
+                      <span>Gagal memuat data pesanan: {ordersError}</span>
+                      {onRetryOrders && (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={onRetryOrders}
+                        >
+                          Coba Lagi
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Search & Filter Toolbar untuk Pelacakan Pesanan */}
                   <div className="tracking-toolbar-card">
@@ -1096,24 +962,6 @@ export default function MyAccountPage({
                         <span>Dibatalkan</span>
                       </button>
                     </div>
-
-                    {/* Quick sample toggle if user wants to see demo orders */}
-                    {authorizedUserOrders.length > 0 && (
-                      <div className="toggle-demo-row">
-                        <button
-                          type="button"
-                          className={`btn-toggle-demo-orders ${forceShowDemo ? 'active-demo' : ''}`}
-                          onClick={() => setForceShowDemo(!forceShowDemo)}
-                        >
-                          <Sparkles size={14} />
-                          <span>
-                            {forceShowDemo
-                              ? 'Sembunyikan Contoh Demo'
-                              : '+ Tampilkan Contoh Demo Pelacakan Lengkap'}
-                          </span>
-                        </button>
-                      </div>
-                    )}
                   </div>
 
                   {/* Orders Tracking Cards List */}
@@ -1121,23 +969,42 @@ export default function MyAccountPage({
                     {filteredOrders.length === 0 ? (
                       <div className="tracking-empty-box">
                         <ShoppingBag size={48} color="#FF86C1" style={{ margin: '0 auto 12px', opacity: 0.8 }} />
-                        <h4>Tidak Ada Pesanan yang Sesuai</h4>
+                        <h4>
+                          {activeOrdersPool.length === 0
+                            ? 'Belum Ada Pesanan'
+                            : 'Tidak Ada Pesanan yang Sesuai'}
+                        </h4>
                         <p>
-                          {trackingSearch
+                          {activeOrdersPool.length === 0
+                            ? 'Kamu belum memiliki riwayat pesanan. Yuk mulai belanja koleksi rajutan Knot & Bloom!'
+                            : trackingSearch
                             ? `Tidak ditemukan pesanan dengan kata kunci "${trackingSearch}". Coba cari dengan nomor pesanan lain.`
                             : 'Belum ada riwayat transaksi pada filter status yang dipilih.'}
                         </p>
-                        <button
-                          type="button"
-                          className="btn-primary btn-sm"
-                          onClick={() => {
-                            setTrackingSearch('');
-                            setStatusFilter('all');
-                          }}
-                          style={{ marginTop: '12px' }}
-                        >
-                          Reset Pencarian & Filter
-                        </button>
+                        {activeOrdersPool.length === 0 ? (
+                          (onNavigate || _onNavigate) && (
+                            <button
+                              type="button"
+                              className="btn-primary btn-sm"
+                              onClick={() => (onNavigate || _onNavigate)('shop')}
+                              style={{ marginTop: '12px' }}
+                            >
+                              Mulai Belanja Sekarang
+                            </button>
+                          )
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            onClick={() => {
+                              setTrackingSearch('');
+                              setStatusFilter('all');
+                            }}
+                            style={{ marginTop: '12px' }}
+                          >
+                            Reset Pencarian & Filter
+                          </button>
+                        )}
                       </div>
                     ) : (
                       filteredOrders.map((order, idx) => {
@@ -1361,15 +1228,21 @@ export default function MyAccountPage({
           {/* TAB: ADDRESS */}
           {currentTab === 'address' && (
             <div className="address-tab-content fade-in">
-              <div className="saved-address-card">
-                <span className="address-badge-main">Alamat Utama</span>
-                <h4>Naila Alfathonah (Kost Mahasiswi Unsri)</h4>
-                <p>
-                  Jl. Srijaya Negara, Lorong Swadaya No. 24, Bukit Besar, Kecamatan Ilir Barat I,
-                  Kota Palembang, Sumatera Selatan 30139
-                </p>
-                <span className="address-phone-txt">Nomor HP: 0812-3456-7890</span>
-              </div>
+              {currentUser?.address ? (
+                <div className="saved-address-card">
+                  <span className="address-badge-main">Alamat Utama</span>
+                  <h4>{userName || 'Alamat Pengiriman'}</h4>
+                  <p>{currentUser.address}</p>
+                  {currentUser.phone && (
+                    <span className="address-phone-txt">Nomor HP: {currentUser.phone}</span>
+                  )}
+                </div>
+              ) : (
+                <div className="saved-address-card">
+                  <h4>Belum Ada Alamat Tersimpan</h4>
+                  <p>Alamat pengiriman dapat diisi saat kamu melakukan checkout pesanan.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -1380,15 +1253,15 @@ export default function MyAccountPage({
                 <h4>Informasi Profil & Akun</h4>
                 <div className="input-group">
                   <label>Nama Lengkap</label>
-                  <input type="text" defaultValue={userName} readOnly />
+                  <input type="text" value={userName} readOnly />
                 </div>
                 <div className="input-group">
                   <label>Alamat Email</label>
-                  <input type="email" defaultValue={userEmail} readOnly />
+                  <input type="email" value={userEmail} readOnly />
                 </div>
                 <div className="input-group">
                   <label>Nomor Telepon (WhatsApp)</label>
-                  <input type="tel" defaultValue="08123456789" readOnly />
+                  <input type="tel" value={currentUser?.phone || ''} placeholder="Belum diisi" readOnly />
                 </div>
               </div>
             </div>

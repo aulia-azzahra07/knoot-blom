@@ -6,7 +6,7 @@ const API_BASE_URL = 'http://localhost:5000';
 
 /**
  * Ambil map produk (byId & byName) -> image_url langsung dari tabel `products` Supabase.
- * Tidak lagi memakai fallback gambar produk lokal/dummy.
+ * Hanya memakai gambar produk resmi dari database.
  */
 const fetchProductImagesMap = async () => {
   try {
@@ -164,67 +164,24 @@ export const mapSupabaseOrderToUi = (o, productImagesMap = {}) => {
 };
 
 /**
- * Filter pembantu untuk membuang order dummy lama dari penyimpanan lokal
- */
-const isRealOrder = (order) => {
-  if (!order || !order.id) return false;
-  const idStr = String(order.id);
-  if (idStr.startsWith('KB12345') || idStr === 'KB123456' || idStr === 'KB123455') {
-    return false;
-  }
-  return true;
-};
-
-/**
  * Mengambil daftar seluruh pesanan resmi secara realtime langsung dari Supabase.
- * Tidak menggunakan data dummy.
  */
 export const fetchOrders = async () => {
   const productImagesMap = await fetchProductImagesMap();
 
-  // 1. Prioritas Utama: Langsung dari Supabase SDK (Koneksi Cepat & Realtime)
-  try {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, order_items(*), payments(*), order_status_history(*)')
-      .order('created_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, order_items(*), payments(*), order_status_history(*)')
+    .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data)) {
-      return data.map((o) => mapSupabaseOrderToUi(o, productImagesMap));
-    }
-    if (error) {
-      console.warn('Supabase SDK error:', error.message);
-    }
-  } catch (err) {
-    console.warn('Gagal fetch orders langsung dari Supabase SDK:', err.message);
+  if (error) {
+    console.error('[orderService] Gagal memuat pesanan dari Supabase:', error);
+    throw error;
   }
 
-  // 2. Prioritas Kedua: Backend API Express (/api/orders) jika backend sedang aktif
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/orders`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.orders)) {
-        return data.orders.map((o) => mapSupabaseOrderToUi(o, productImagesMap));
-      }
-    }
-  } catch (err) {
-    // Backend offline is normal in dev mode
-  }
-
-  // 3. Fallback: LocalStorage hanya jika berisi pesanan asli buatan pengguna
-  try {
-    const saved = localStorage.getItem('kb_orders');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        const filtered = parsed.filter(isRealOrder);
-        return filtered;
-      }
-    }
-  } catch {}
-
-  return [];
+  return Array.isArray(data)
+    ? data.map((o) => mapSupabaseOrderToUi(o, productImagesMap))
+    : [];
 };
 
 /**
@@ -232,6 +189,17 @@ export const fetchOrders = async () => {
  * Callback akan dipanggil setiap ada pesanan baru, pembaruan status, atau pembayaran
  */
 export const subscribeToOrders = (onUpdate) => {
+  const safeRefresh = async () => {
+    try {
+      const fresh = await fetchOrders();
+      if (typeof onUpdate === 'function') {
+        onUpdate(fresh);
+      }
+    } catch (err) {
+      console.error('[Supabase Realtime] Gagal menyegarkan pesanan:', err);
+    }
+  };
+
   try {
     const channel = supabase
       .channel('orders-realtime-knotbloom')
@@ -244,10 +212,7 @@ export const subscribeToOrders = (onUpdate) => {
         },
         async (payload) => {
           console.log('[Supabase Realtime] Perubahan pesanan terdeteksi:', payload.eventType, payload.new?.order_number);
-          const fresh = await fetchOrders();
-          if (typeof onUpdate === 'function') {
-            onUpdate(fresh);
-          }
+          await safeRefresh();
         }
       )
       .on(
@@ -259,10 +224,7 @@ export const subscribeToOrders = (onUpdate) => {
         },
         async (payload) => {
           console.log('[Supabase Realtime] Perubahan rincian barang:', payload.eventType);
-          const fresh = await fetchOrders();
-          if (typeof onUpdate === 'function') {
-            onUpdate(fresh);
-          }
+          await safeRefresh();
         }
       )
       .on(
@@ -274,10 +236,7 @@ export const subscribeToOrders = (onUpdate) => {
         },
         async (payload) => {
           console.log('[Supabase Realtime] Perubahan status pembayaran:', payload.eventType);
-          const fresh = await fetchOrders();
-          if (typeof onUpdate === 'function') {
-            onUpdate(fresh);
-          }
+          await safeRefresh();
         }
       )
       .on(
@@ -289,10 +248,7 @@ export const subscribeToOrders = (onUpdate) => {
         },
         async (payload) => {
           console.log('[Supabase Realtime] Perubahan riwayat tracking order:', payload.eventType);
-          const fresh = await fetchOrders();
-          if (typeof onUpdate === 'function') {
-            onUpdate(fresh);
-          }
+          await safeRefresh();
         }
       )
       .subscribe((status) => {
@@ -660,38 +616,21 @@ export const fetchCustomerOrders = async (userId) => {
     // Backend API offline / dev mode -> lanjut ke Supabase SDK langsung
   }
 
-  // 2. Prioritas Kedua: Query langsung ke Supabase dengan filter ketat user_id
-  try {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, order_items(*), payments(*)')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+  // Query langsung ke Supabase dengan filter ketat user_id
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, order_items(*), payments(*), order_status_history(*)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data)) {
-      return data.map((o) => mapSupabaseOrderToUi(o, productImagesMap));
-    }
-    if (error) {
-      console.warn('Supabase customer orders query notice:', error.message);
-    }
-  } catch (sbErr) {
-    console.warn('Supabase SDK customer orders error:', sbErr.message);
+  if (error) {
+    console.error('[orderService] Gagal memuat pesanan customer dari Supabase:', error);
+    throw error;
   }
 
-  // 3. Fallback: Filter LocalStorage hanya untuk pesanan milik user_id ini
-  try {
-    const saved = localStorage.getItem('kb_orders');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((o) => o.user_id === userId || o.userId === userId || !o.user_id)
-          .filter(isRealOrder);
-      }
-    }
-  } catch {}
-
-  return [];
+  return Array.isArray(data)
+    ? data.map((o) => mapSupabaseOrderToUi(o, productImagesMap))
+    : [];
 };
 
 /**

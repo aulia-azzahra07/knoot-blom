@@ -11,6 +11,15 @@ const LEGACY_AUTH_KEYS = [
   "isLoggedIn",
   "loggedInUser",
   "authUser",
+  "kb_orders",
+  "kb_products",
+  "kb_live_chat_messages_v1",
+  "kb_last_order",
+  "kb_demo_mode",
+  "kb_demo_orders",
+  "demoMode",
+  "isDemo",
+  "useMock",
 ];
 
 /**

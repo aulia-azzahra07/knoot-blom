@@ -26,6 +26,14 @@ export default function ProductCard({
     }
   };
 
+  const activeVariants = Array.isArray(product.variants)
+    ? product.variants.filter((v) => v.is_active !== false)
+    : [];
+  const hasStock =
+    activeVariants.length > 0
+      ? activeVariants.some((v) => (Number(v.stock) || 0) > 0)
+      : (Number(product.stock) || 0) > 0;
+
   return (
     <div className="product-card">
       {/* Product Image & Badges */}
@@ -101,11 +109,13 @@ export default function ProductCard({
 
           <button
             className="card-quick-cart-btn"
+            disabled={!hasStock}
+            style={!hasStock ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
             onClick={(e) => {
               e.stopPropagation();
-              onAddToCart(product);
+              if (hasStock) onAddToCart(product);
             }}
-            title="Tambah ke Keranjang"
+            title={hasStock ? 'Tambah ke Keranjang' : 'Stok Habis'}
           >
             <ShoppingBag size={16} />
           </button>

@@ -2885,50 +2885,10 @@
   box-shadow: 0 4px 12px rgba(255, 134, 193, 0.35);
 }
 
-.toggle-demo-row {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 6px;
-}
-
-.btn-toggle-demo-orders {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #9333EA;
-  background: #F5F3FF;
-  border: 1px solid #DDD6FE;
-  padding: 6px 14px;
-  border-radius: var(--radius-full);
-  transition: var(--transition);
-}
-
-.btn-toggle-demo-orders:hover,
-.btn-toggle-demo-orders.active-demo {
-  background: #8B5CF6;
-  color: #FFFFFF;
-  border-color: #8B5CF6;
-}
-
 .head-badge-right-group {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.demo-preview-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: #F5F3FF;
-  color: #7C3AED;
-  border: 1px solid #DDD6FE;
-  font-size: 0.74rem;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: var(--radius-full);
 }
 
 .tracking-empty-box {
@@ -3914,73 +3874,6 @@
   background: #DCFCE7;
   padding: 4px 10px;
   border-radius: var(--radius-full);
-}
-
-/* ----------------------------------------------------
-   INTERACTIVE SIMULATION CONTROLLER (TESTING DEMO)
----------------------------------------------------- */
-.interactive-simulation-controller {
-  background: #FFF9ED;
-  border: 1px dashed #FCD34D;
-  border-radius: var(--radius-md);
-  padding: 12px 16px;
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.sim-controller-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  color: #92400E;
-  font-weight: 600;
-}
-
-.sim-buttons-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.btn-sim-pill {
-  background: #FFFFFF;
-  border: 1px solid #FCD34D;
-  color: #92400E;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 5px 12px;
-  border-radius: var(--radius-full);
-  transition: var(--transition);
-}
-
-.btn-sim-pill:hover {
-  background: #FEF3C7;
-}
-
-.btn-sim-pill.sim-pill-active {
-  background: #F59E0B;
-  color: #FFFFFF;
-  border-color: #F59E0B;
-  font-weight: 700;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
-}
-
-.btn-sim-reset {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.75rem;
-  color: #6B7280;
-  padding: 5px 10px;
-  border-radius: var(--radius-full);
-  border: 1px solid #E5E7EB;
-  background: #FFFFFF;
 }
 
 .btn-sim-reset:hover {

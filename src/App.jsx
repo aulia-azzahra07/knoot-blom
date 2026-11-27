@@ -16,7 +16,13 @@ import BlogPage from './views/BlogPage';
 import AdminPortalPage from './views/AdminPortalPage';
 import LoginPage from './views/LoginPage';
 
-import { fetchProducts } from './services/productService';
+import {
+  fetchProducts,
+  fetchAdminProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct
+} from './services/productService';
 import { fetchOrders, updateOrderStatusOnServer, subscribeToOrders } from './services/orderService';
 import { fetchAllReviews } from './services/reviewService';
 import { supabase } from './lib/supabase';
@@ -28,13 +34,6 @@ import {
 } from './services/authService';
 import { CheckCircle2 } from 'lucide-react';
 import './App.css';
-
-// Filter untuk memastikan tidak ada data dummy lama
-const isRealOrder = (order) => {
-  if (!order || !order.id) return false;
-  const idStr = String(order.id);
-  return !idStr.startsWith('KB12345') && idStr !== 'KB123456' && idStr !== 'KB123455';
-};
 
 // Filter untuk membuang otomatis sisa item produk yang sudah tidak tersedia dari localStorage
 const isRemovedLegacyItem = (item) => {
@@ -120,7 +119,7 @@ export default function App() {
         setCurrentUser(null);
         setAdminStorePreview(false);
         setOrders([]);
-        try { localStorage.removeItem('kb_orders'); } catch {}
+        setOrdersError(null);
         setCurrentView('home');
         try {
           const p = window.location.pathname.toLowerCase();
@@ -154,20 +153,48 @@ export default function App() {
 
   // ── PRODUK & ULASAN (Satu sumber saja: Supabase) ──────────────────────
   const [products, setProducts] = useState([]);
+  const [adminProducts, setAdminProducts] = useState([]);
   const [reviews, setReviews] = useState([]);
 
+  const refreshAllProducts = async (includeAdmin = userRole === 'admin') => {
+    const tasks = [fetchProducts()];
+    if (includeAdmin) {
+      tasks.push(fetchAdminProducts());
+    }
+    const [loadedPublic, loadedAdmin] = await Promise.all(tasks);
+    if (Array.isArray(loadedPublic)) setProducts(loadedPublic);
+    if (includeAdmin && Array.isArray(loadedAdmin)) setAdminProducts(loadedAdmin);
+  };
+
   const refreshProductsAndReviews = async () => {
-    const [loadedProducts, loadedReviews] = await Promise.all([
-      fetchProducts(),
-      fetchAllReviews(10)
-    ]);
-    if (Array.isArray(loadedProducts)) setProducts(loadedProducts);
-    if (Array.isArray(loadedReviews)) setReviews(loadedReviews);
+    try {
+      const [loadedProducts, loadedReviews] = await Promise.all([
+        fetchProducts(),
+        fetchAllReviews(10)
+      ]);
+      if (Array.isArray(loadedProducts)) setProducts(loadedProducts);
+      if (Array.isArray(loadedReviews)) setReviews(loadedReviews);
+      if (userRole === 'admin') {
+        const loadedAdmin = await fetchAdminProducts();
+        if (Array.isArray(loadedAdmin)) setAdminProducts(loadedAdmin);
+      }
+    } catch (err) {
+      console.error('[App] Gagal memuat ulang produk & ulasan:', err);
+    }
   };
 
   useEffect(() => {
     let isMounted = true;
-    Promise.all([fetchProducts(), fetchAllReviews(10)]).then(([loadedProducts, loadedReviews]) => {
+    Promise.all([
+      fetchProducts().catch((err) => {
+        console.error('[App] Gagal memuat katalog produk:', err);
+        return [];
+      }),
+      fetchAllReviews(10).catch((err) => {
+        console.error('[App] Gagal memuat ulasan:', err);
+        return [];
+      })
+    ]).then(([loadedProducts, loadedReviews]) => {
       if (!isMounted) return;
       if (Array.isArray(loadedProducts)) setProducts(loadedProducts);
       if (Array.isArray(loadedReviews)) setReviews(loadedReviews);
@@ -175,12 +202,36 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
-  // ── PESANAN (Hanya dimuat untuk pengguna yang login; guest tidak melihat data pesanan) ──
+  // Muat seluruh produk (termasuk is_active = false & semua varian) khusus saat role admin aktif
+  useEffect(() => {
+    if (authLoading || userRole !== 'admin') {
+      setAdminProducts([]);
+      return;
+    }
+    let isMounted = true;
+    fetchAdminProducts()
+      .then((loaded) => {
+        if (isMounted && Array.isArray(loaded)) {
+          setAdminProducts(loaded);
+        }
+      })
+      .catch((err) => {
+        console.error('[App] Gagal memuat katalog admin dari Supabase:', err);
+        if (isMounted) {
+          showToast(`Gagal memuat katalog produk: ${err.message || 'Periksa RLS Supabase.'}`);
+        }
+      });
+    return () => { isMounted = false; };
+  }, [authLoading, userRole]);
+
+  // ── PESANAN (Hanya dimuat langsung dari Supabase untuk pengguna yang login) ──
   const [orders, setOrders] = useState([]);
+  const [ordersError, setOrdersError] = useState(null);
 
   useEffect(() => {
     if (authLoading || !currentUser) {
       setOrders([]);
+      setOrdersError(null);
       return;
     }
 
@@ -189,19 +240,22 @@ export default function App() {
       try {
         const loaded = await fetchOrders();
         if (isMounted && Array.isArray(loaded)) {
-          setOrders(loaded.filter(isRealOrder));
-          try { localStorage.setItem('kb_orders', JSON.stringify(loaded)); } catch {}
+          setOrders(loaded);
+          setOrdersError(null);
         }
       } catch (err) {
-        console.warn('Error fetching orders:', err.message);
+        console.error('[App] Gagal memuat pesanan dari Supabase:', err);
+        if (isMounted) {
+          setOrdersError(err?.message || 'Gagal memuat data pesanan dari server.');
+        }
       }
     };
 
     loadFreshOrders();
     const unsubscribe = subscribeToOrders((fresh) => {
       if (isMounted && Array.isArray(fresh)) {
-        setOrders(fresh.filter(isRealOrder));
-        try { localStorage.setItem('kb_orders', JSON.stringify(fresh)); } catch {}
+        setOrders(fresh);
+        setOrdersError(null);
       }
     });
     const intervalId = setInterval(loadFreshOrders, 4000); // poll tiap 4 detik
@@ -266,29 +320,58 @@ export default function App() {
         return cleaned.length !== prev.length ? cleaned : prev;
       });
 
-      // Sinkronkan harga & gambar item non-custom di keranjang dengan data terbaru dari tabel `products` Supabase
+      // Sinkronkan harga, gambar, status aktif, dan varian item non-custom di keranjang dengan data terbaru Supabase
       setCartItems((prev) => {
         if (!Array.isArray(prev) || prev.length === 0) return prev;
-        const withoutLegacy = prev.filter((item) => !isRemovedLegacyItem(item));
-        let changed = withoutLegacy.length !== prev.length;
-        const synced = withoutLegacy.map((item) => {
-          if (item.isCustom) return item;
+        let changed = false;
+        const synced = [];
+        for (const item of prev) {
+          if (isRemovedLegacyItem(item)) {
+            changed = true;
+            continue;
+          }
+          if (item.isCustom) {
+            synced.push(item);
+            continue;
+          }
           const dbProd = products.find((p) => p.id === item.id || (item.slug && p.slug === item.slug));
-          if (!dbProd) return item;
+          // Produk yang dinonaktifkan (is_active = false) atau dihapus tidak boleh tersisa di keranjang
+          if (!dbProd || dbProd.is_active === false) {
+            changed = true;
+            continue;
+          }
+          // Jika produk punya varian, pastikan varian terpilih masih aktif dan stok > 0
+          const activeVars = Array.isArray(dbProd.variants)
+            ? dbProd.variants.filter((v) => v.is_active !== false)
+            : [];
+          if (activeVars.length > 0 && item.selectedColor) {
+            const matchedVar = activeVars.find(
+              (v) =>
+                (item.variant_id && v.id === item.variant_id) ||
+                (item.selectedColor?.id && v.id === item.selectedColor.id) ||
+                v.name === item.selectedColor?.name
+            );
+            if (!matchedVar || matchedVar.is_active === false || (Number(matchedVar.stock) || 0) <= 0) {
+              changed = true;
+              continue;
+            }
+          }
+
           const dbPrice = Number(dbProd.price) || 0;
           const nextImage = item.image && item.image.startsWith('http') ? item.image : dbProd.image;
           if (item.price !== dbPrice || item.name !== dbProd.name || item.image !== nextImage) {
             changed = true;
-            return {
+            synced.push({
               ...item,
               name: dbProd.name,
               price: dbPrice,
               originalPrice: dbProd.originalPrice,
               image: nextImage || dbProd.image
-            };
+            });
+          } else {
+            synced.push(item);
           }
-          return item;
-        });
+        }
         return changed ? synced : prev;
       });
     }
@@ -448,7 +531,7 @@ export default function App() {
     setCurrentUser(null);
     setAdminStorePreview(false);
     setOrders([]);
-    try { localStorage.removeItem('kb_orders'); } catch {}
+    setOrdersError(null);
     setCurrentView('home');
     try {
       const p = window.location.pathname.toLowerCase();
@@ -459,68 +542,23 @@ export default function App() {
     showToast('Anda telah keluar dari akun.');
   };
 
-  // Product Management Handlers (Admin - Local & Server Synchronized)
-  const handleAddProduct = async (newProduct) => {
-    setProducts((prev) => {
-      const updated = [newProduct, ...prev];
-      try {
-        localStorage.setItem('kb_products', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    try {
-      await fetch('http://localhost:5000/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProduct)
-      });
-      // Muat ulang daftar produk resmi dari database
-      const refreshed = await fetchProducts();
-      if (Array.isArray(refreshed) && refreshed.length > 0) {
-        setProducts(refreshed);
-      }
-    } catch (err) {
-      console.warn('Gagal sinkron produk baru ke backend:', err.message);
-    }
+  // Product Management Handlers (Admin - Langsung ke Supabase & muat ulang dari DB)
+  const handleAddProduct = async (newProductPayload) => {
+    const created = await createProduct(newProductPayload);
+    await refreshAllProducts(true);
+    return created;
   };
 
-  const handleUpdateProduct = async (updatedProduct) => {
-    setProducts((prev) => {
-      const updated = prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p));
-      try {
-        localStorage.setItem('kb_products', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    try {
-      await fetch(`http://localhost:5000/api/products/${encodeURIComponent(updatedProduct.id)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedProduct)
-      });
-    } catch (err) {
-      console.warn('Gagal update produk di backend:', err.message);
-    }
+  const handleUpdateProduct = async (productId, updatedProductPayload) => {
+    const updated = await updateProduct(productId, updatedProductPayload);
+    await refreshAllProducts(true);
+    return updated;
   };
 
   const handleDeleteProduct = async (productId) => {
-    setProducts((prev) => {
-      const updated = prev.filter((p) => p.id !== productId);
-      try {
-        localStorage.setItem('kb_products', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    try {
-      await fetch(`http://localhost:5000/api/products/${encodeURIComponent(productId)}`, {
-        method: 'DELETE'
-      });
-    } catch (err) {
-      console.warn('Gagal hapus produk di backend:', err.message);
-    }
+    const result = await deleteProduct(productId);
+    await refreshAllProducts(true);
+    return result;
   };
 
   // Order Management Handlers (Admin - Server/RPC Validated & Supabase Synchronized)
@@ -563,24 +601,25 @@ export default function App() {
         }
         return o;
       });
-      try {
-        localStorage.setItem('kb_orders', JSON.stringify(updated));
-      } catch (e) {}
       return updated;
     });
 
     // 3. Sinkronkan ulang orders (beserta order_status_history terbaru) dari Supabase
-    fetchOrders().then((fresh) => {
-      if (Array.isArray(fresh)) {
-        setOrders(fresh);
-        try { localStorage.setItem('kb_orders', JSON.stringify(fresh)); } catch {}
-      }
-    });
+    fetchOrders()
+      .then((fresh) => {
+        if (Array.isArray(fresh)) {
+          setOrders(fresh);
+          setOrdersError(null);
+        }
+      })
+      .catch((err) => {
+        console.error('[App] Gagal sinkron ulang pesanan setelah update status:', err);
+      });
 
     // 4. Jika pesanan menjadi Selesai, segarkan data produk agar angka "terjual" ikut ter-update otomatis
     if (newStatus === 'Selesai') {
-      fetchProducts().then((loaded) => {
-        if (Array.isArray(loaded)) setProducts(loaded);
+      refreshAllProducts().catch((err) => {
+        console.error('[App] Gagal menyegarkan katalog produk setelah pesanan selesai:', err);
       });
     }
 
@@ -592,19 +631,20 @@ export default function App() {
   const handleOrderSuccess = (newOrder) => {
     setOrders((prev) => {
       const filtered = prev.filter((o) => o.id !== newOrder.id && o.order_number !== newOrder.id);
-      const updated = [newOrder, ...filtered];
-      try {
-        localStorage.setItem('kb_orders', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
+      return [newOrder, ...filtered];
     });
     setCartItems([]);
     // Sinkronisasi instan ke database untuk memastikan item dan rincian transaksi lengkap
-    fetchOrders().then((fresh) => {
-      if (Array.isArray(fresh) && fresh.length > 0) {
-        setOrders(fresh);
-      }
-    });
+    fetchOrders()
+      .then((fresh) => {
+        if (Array.isArray(fresh)) {
+          setOrders(fresh);
+          setOrdersError(null);
+        }
+      })
+      .catch((err) => {
+        console.error('[App] Gagal sinkron ulang pesanan setelah checkout:', err);
+      });
   };
 
   // Manual Refresh Orders (Admin & Customer)
@@ -613,33 +653,72 @@ export default function App() {
       const fresh = await fetchOrders();
       if (Array.isArray(fresh)) {
         setOrders(fresh);
-        try {
-          localStorage.setItem('kb_orders', JSON.stringify(fresh));
-        } catch {}
-        showToast(`✨ Realtime: ${fresh.length} pesanan tersinkronisasi langsung dari database.`);
+        setOrdersError(null);
+        showToast(`✨ ${fresh.length} pesanan berhasil dimuat dari database.`);
       }
     } catch (e) {
+      console.error('[App] Gagal menyegarkan data pesanan:', e);
+      setOrdersError(e?.message || 'Gagal menyegarkan data pesanan.');
       showToast('Gagal menyegarkan data pesanan.');
     }
   };
 
-  // Add to Cart (selalu gunakan harga terbaru dari tabel `products` Supabase untuk produk katalog)
+  // Add to Cart (selalu gunakan harga terbaru dari products.price & validasi produk/varian aktif + stok)
   const handleAddToCart = (product) => {
     if (isRemovedLegacyItem(product)) return;
-    const qtyToAdd = product.quantity || 1;
-    const colorName = product.selectedColor?.name || 'Default';
+    const qtyToAdd = Math.max(1, Number(product.quantity) || 1);
     const isCustom = Boolean(product.isCustom);
-    const dbProduct = !isCustom
-      ? products.find((p) => p.id === product.id || (product.slug && p.slug === product.slug))
-      : null;
+
+    let dbProduct = null;
+    let chosenVariant = product.selectedColor || null;
+
+    if (!isCustom) {
+      dbProduct = products.find((p) => p.id === product.id || (product.slug && p.slug === product.slug));
+      if (!dbProduct || dbProduct.is_active === false) {
+        showToast('Produk tidak aktif atau tidak tersedia.');
+        return;
+      }
+
+      const activeVariants = Array.isArray(dbProduct.variants)
+        ? dbProduct.variants.filter((v) => v.is_active !== false)
+        : [];
+
+      if (activeVariants.length > 0) {
+        if (chosenVariant) {
+          chosenVariant =
+            activeVariants.find(
+              (v) =>
+                (product.variant_id && v.id === product.variant_id) ||
+                (chosenVariant.id && v.id === chosenVariant.id) ||
+                v.name === chosenVariant.name
+            ) || null;
+        } else {
+          chosenVariant = activeVariants.find((v) => (Number(v.stock) || 0) > 0) || null;
+        }
+
+        if (!chosenVariant || chosenVariant.is_active === false || (Number(chosenVariant.stock) || 0) <= 0) {
+          showToast('Stok varian produk sedang habis atau tidak aktif.');
+          return;
+        }
+      } else if ((Number(dbProduct.stock) || 0) <= 0) {
+        showToast('Stok produk sedang habis.');
+        return;
+      }
+    }
+
+    const colorName = chosenVariant?.name || 'Default';
     const authoritativePrice = dbProduct ? Number(dbProduct.price) : (Number(product.price) || 0);
     const authoritativeProduct = dbProduct
       ? {
           ...product,
+          id: dbProduct.id,
+          slug: dbProduct.slug,
           name: dbProduct.name,
           price: authoritativePrice,
           originalPrice: dbProduct.originalPrice,
-          image: product.image || dbProduct.image
+          image: product.image || dbProduct.image,
+          variant_id: chosenVariant?.id || null,
+          selectedColor: chosenVariant
         }
       : { ...product, price: authoritativePrice };
 
@@ -662,7 +741,7 @@ export default function App() {
           {
             ...authoritativeProduct,
             quantity: qtyToAdd,
-            selectedColor: authoritativeProduct.selectedColor || (authoritativeProduct.colors ? authoritativeProduct.colors[0] : null)
+            selectedColor: chosenVariant
           }
         ];
       }
@@ -789,7 +868,7 @@ export default function App() {
         {/* Admin Portal View (hanya untuk role admin yang terverifikasi) */}
         {currentView === 'admin' && userRole === 'admin' && (
           <AdminPortalPage
-            products={products}
+            products={adminProducts}
             orders={orders}
             onAddProduct={handleAddProduct}
             onUpdateProduct={handleUpdateProduct}
@@ -859,6 +938,8 @@ export default function App() {
         {currentUser && (currentView === 'account' || currentView === 'account-wishlist' || currentView === 'account-chat') && (
           <MyAccountPage
             userOrders={orders}
+            ordersError={ordersError}
+            onRetryOrders={handleRefreshOrders}
             wishlist={wishlist}
             allProducts={products}
             onSelectProduct={handleSelectProduct}

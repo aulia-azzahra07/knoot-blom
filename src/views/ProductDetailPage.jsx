@@ -64,16 +64,27 @@ export default function ProductDetailPage({
     return prod.image || prod.images?.[0] || '';
   };
 
-  const initialColor = product.colors && product.colors.length > 0 ? product.colors[0] : null;
+  const activeVariants = Array.isArray(product.variants)
+    ? product.variants.filter((v) => v.is_active !== false)
+    : [];
+  const hasVariants = activeVariants.length > 0;
+  const getDefaultSelectableVariant = (prod) => {
+    const vars = Array.isArray(prod?.variants)
+      ? prod.variants.filter((v) => v.is_active !== false)
+      : [];
+    return vars.find((v) => (Number(v.stock) || 0) > 0) || null;
+  };
+
+  const initialColor = getDefaultSelectableVariant(product);
   const [selectedColor, setSelectedColor] = useState(initialColor);
   const [selectedImage, setSelectedImage] = useState(() => resolveColorImage(initialColor, product) || product.image);
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('deskripsi');
 
-  // Sinkronisasi foto & varian warna saat produk berganti
+  // Sinkronisasi foto & varian saat produk berganti
   React.useEffect(() => {
     if (product) {
-      const initCol = product.colors && product.colors.length > 0 ? product.colors[0] : null;
+      const initCol = getDefaultSelectableVariant(product);
       setSelectedColor(initCol);
       const initImg = initCol ? resolveColorImage(initCol, product) : (product.image || product.images?.[0]);
       setSelectedImage(initImg);
@@ -81,9 +92,11 @@ export default function ProductDetailPage({
     }
   }, [product]);
 
-  // Handler saat warna diklik: Ganti warna aktif DAN ubah gambar utama otomatis
+  // Handler saat varian diklik: hanya boleh pilih varian aktif dengan stok > 0
   const handleSelectColor = (col) => {
+    if (!col || col.is_active === false || (Number(col.stock) || 0) <= 0) return;
     setSelectedColor(col);
+    setQuantity((prev) => Math.min(prev, Math.max(1, Number(col.stock) || 1)));
     const targetImg = resolveColorImage(col, product);
     if (targetImg) {
       setSelectedImage(targetImg);
@@ -93,9 +106,9 @@ export default function ProductDetailPage({
   // Handler saat thumbnail foto diklik
   const handleSelectThumbnail = (imgUrl) => {
     setSelectedImage(imgUrl);
-    // Jika thumbnail cocok dengan salah satu warna, sinkronkan juga warna aktifnya
-    if (product.colors && product.colors.length > 0) {
-      const matchedCol = product.colors.find((col) => {
+    if (activeVariants.length > 0) {
+      const matchedCol = activeVariants.find((col) => {
+        if ((Number(col.stock) || 0) <= 0) return false;
         const resolved = resolveColorImage(col, product);
         return resolved === imgUrl || imgUrl.toLowerCase().includes((col.name || '').toLowerCase());
       });
@@ -156,14 +169,23 @@ export default function ProductDetailPage({
     return 'Rp ' + Number(val).toLocaleString('id-ID');
   };
 
+  const availableStock = hasVariants
+    ? (selectedColor ? Math.max(0, Number(selectedColor.stock) || 0) : 0)
+    : Math.max(0, Number(product.stock) || 0);
+  const canAddToCart = product.is_active !== false && availableStock > 0 && (!hasVariants || Boolean(selectedColor));
+
   const handleAddToCartClick = () => {
+    if (!canAddToCart) {
+      showToast('Stok produk atau varian yang dipilih sedang habis.');
+      return;
+    }
     onAddToCart({
       ...product,
-      quantity,
-      selectedColor: selectedColor || (product.colors ? product.colors[0] : null),
+      quantity: Math.min(quantity, availableStock),
+      variant_id: selectedColor?.id || null,
+      selectedColor: selectedColor || null,
       image: selectedImage || product.image
     });
-    showToast(`${quantity}x ${product.name} (${selectedColor?.name || 'Varian'}) dimasukkan ke keranjang belanja!`);
   };
 
   // Related products (exclude current)
@@ -268,35 +290,51 @@ export default function ProductDetailPage({
           {/* Description Snippet */}
           <p className="detail-short-desc">{product.description}</p>
 
-          {/* Color Variant Swatches */}
-          {product.colors && product.colors.length > 0 && (
+          {/* Variant Selector (dibaca langsung dari tabel product_variants) */}
+          {hasVariants && (
             <div className="detail-variant-section">
               <div className="variant-label-row">
-                <span className="variant-label-title">Pilih Warna:</span>
+                <span className="variant-label-title">Pilih Varian:</span>
                 <strong className="variant-selected-name">
-                  {selectedColor?.name || 'Pilih salah satu'}
+                  {selectedColor
+                    ? `${selectedColor.name} (Stok: ${selectedColor.stock})`
+                    : 'Semua varian sedang habis'}
                 </strong>
               </div>
               <div className="color-swatches-grid">
-                {product.colors.map((col) => (
-                  <button
-                    key={col.hex}
-                    type="button"
-                    className={`color-swatch-btn ${selectedColor?.hex === col.hex ? 'active' : ''}`}
-                    onClick={() => handleSelectColor(col)}
-                    title={col.name}
-                  >
-                    <span
-                      className="swatch-circle"
-                      style={{ backgroundColor: col.hex }}
+                {activeVariants.map((col) => {
+                  const isOutOfStock = (Number(col.stock) || 0) <= 0 || col.is_active === false;
+                  const isSelected = selectedColor && (selectedColor.id ? selectedColor.id === col.id : selectedColor.name === col.name);
+                  const hexColor = col.color_hex || col.hex;
+                  return (
+                    <button
+                      key={col.id || col.name}
+                      type="button"
+                      disabled={isOutOfStock}
+                      className={`color-swatch-btn ${isSelected ? 'active' : ''}`}
+                      onClick={() => handleSelectColor(col)}
+                      title={isOutOfStock ? `${col.name} (Stok Habis)` : `${col.name} — Stok ${col.stock}`}
+                      style={
+                        isOutOfStock
+                          ? { opacity: 0.45, cursor: 'not-allowed', textDecoration: 'line-through' }
+                          : undefined
+                      }
                     >
-                      {selectedColor?.hex === col.hex && (
-                        <Check size={14} color="#484F4F" />
+                      {hexColor && (
+                        <span
+                          className="swatch-circle"
+                          style={{ backgroundColor: hexColor }}
+                        >
+                          {isSelected && <Check size={14} color="#484F4F" />}
+                        </span>
                       )}
-                    </span>
-                    <span className="swatch-name">{col.name}</span>
-                  </button>
-                ))}
+                      <span className="swatch-name">
+                        {col.name}
+                        {isOutOfStock ? ' (Habis)' : ''}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -308,24 +346,32 @@ export default function ProductDetailPage({
               <div className="qty-counter-box">
                 <button
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  disabled={quantity <= 1}
+                  disabled={quantity <= 1 || !canAddToCart}
                 >
                   <Minus size={16} />
                 </button>
-                <span className="qty-display-num">{quantity}</span>
-                <button onClick={() => setQuantity((q) => q + 1)}>
+                <span className="qty-display-num">{canAddToCart ? quantity : 0}</span>
+                <button
+                  onClick={() => setQuantity((q) => Math.min(availableStock, q + 1))}
+                  disabled={!canAddToCart || quantity >= availableStock}
+                >
                   <Plus size={16} />
                 </button>
               </div>
+              <span style={{ fontSize: '0.8rem', color: availableStock > 0 ? '#6B7280' : '#DC2626', marginLeft: '8px' }}>
+                {availableStock > 0 ? `Tersedia ${availableStock}` : 'Stok Habis'}
+              </span>
             </div>
 
             <div className="detail-btn-group">
               <button
                 className="btn-primary btn-add-cart-large"
                 onClick={handleAddToCartClick}
+                disabled={!canAddToCart}
+                style={!canAddToCart ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}
               >
                 <ShoppingBag size={20} />
-                <span>Tambah ke Keranjang</span>
+                <span>{canAddToCart ? 'Tambah ke Keranjang' : 'Stok Habis'}</span>
               </button>
 
               <button

@@ -30,7 +30,10 @@ import {
   Calendar,
   AlertCircle,
   Navigation,
-  Banknote
+  Banknote,
+  Upload,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { CATEGORIES } from '../data/products';
 import AdminCustomerChat from '../components/AdminCustomerChat';
@@ -40,6 +43,10 @@ import {
   getOrCreateCustomerConversation,
   getAdminConversations
 } from '../services/adminChatService';
+import {
+  uploadProductImage,
+  generateSlugFromName
+} from '../services/productService';
 import { getSafeProductImage, handleProductImageError } from '../utils/productImage';
 
 export default function AdminPortalPage({
@@ -973,8 +980,22 @@ export default function AdminPortalPage({
                   </div>
 
                   <div className="prod-card-details">
-                    <div className="prod-cat-pill">
-                      {CATEGORIES.find((c) => c.id === prod.category)?.name || prod.category}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                      <div className="prod-cat-pill">
+                        {CATEGORIES.find((c) => c.id === prod.category)?.name || prod.category}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          background: prod.is_active === false ? '#FEE2E2' : '#DCFCE7',
+                          color: prod.is_active === false ? '#B91C1C' : '#15803D'
+                        }}
+                      >
+                        {prod.is_active === false ? 'Nonaktif' : 'Aktif'}
+                      </span>
                     </div>
 
                     <h4 className="prod-name-title">{prod.name}</h4>
@@ -988,27 +1009,31 @@ export default function AdminPortalPage({
 
                     <p className="prod-desc-preview">{prod.description}</p>
 
-                    {/* Color variants preview */}
-                    {prod.colors && prod.colors.length > 0 && (
+                    {/* Variants preview (dari tabel product_variants) */}
+                    {Array.isArray(prod.variants) && prod.variants.length > 0 && (
                       <div className="colors-preview-row">
-                        <span className="color-label">Varian:</span>
+                        <span className="color-label">Varian ({prod.variants.length}):</span>
                         <div className="color-dots-list">
-                          {prod.colors.slice(0, 5).map((c, i) => (
+                          {prod.variants.slice(0, 5).map((v) => (
                             <span
-                              key={i}
+                              key={v.id || v.name}
                               className="color-dot-mini"
-                              style={{ backgroundColor: c.hex }}
-                              title={c.name}
+                              style={{
+                                backgroundColor: v.color_hex || '#E5E7EB',
+                                opacity: v.is_active === false || (Number(v.stock) || 0) <= 0 ? 0.35 : 1
+                              }}
+                              title={`${v.name} — Stok: ${v.stock}${v.is_active === false ? ' (Nonaktif)' : ''}`}
                             />
                           ))}
-                          {prod.colors.length > 5 && (
-                            <span className="more-colors-count">+{prod.colors.length - 5}</span>
+                          {prod.variants.length > 5 && (
+                            <span className="more-colors-count">+{prod.variants.length - 5}</span>
                           )}
                         </div>
                       </div>
                     )}
 
                     <div className="prod-stats-row">
+                      <span>Stok: <strong>{prod.stock ?? 0}</strong></span>
                       <span>
                         {prod.reviewsCount > 0 && prod.rating != null
                           ? `★ ${Number(prod.rating).toFixed(1)} (${prod.reviewsCount})`
@@ -1166,33 +1191,15 @@ export default function AdminPortalPage({
           editingProduct={editingProduct}
           onClose={() => setIsProductModalOpen(false)}
           onSave={async (prodData) => {
-            try {
-              if (editingProduct) {
-                await onUpdateProduct({
-                  ...editingProduct,
-                  ...prodData,
-                });
-
-                showToast(
-                  `Produk "${prodData.name}" berhasil diperbarui! ♡`
-                );
-              } else {
-                await onAddProduct(prodData);
-
-                showToast(
-                  `Produk baru "${prodData.name}" berhasil ditambahkan ke katalog! ✨`
-                );
-              }
-
-              setIsProductModalOpen(false);
-              setEditingProduct(null);
-            } catch (error) {
-              console.error('Gagal menyimpan produk:', error);
-
-              showToast(
-                `Gagal menyimpan produk: ${error.message || 'Terjadi kesalahan.'}`
-              );
+            if (editingProduct) {
+              await onUpdateProduct(editingProduct.id, prodData);
+              showToast(`Produk "${prodData.name}" berhasil diperbarui! ♡`);
+            } else {
+              await onAddProduct(prodData);
+              showToast(`Produk baru "${prodData.name}" berhasil ditambahkan ke katalog! ✨`);
             }
+            setIsProductModalOpen(false);
+            setEditingProduct(null);
           }}
         />
       )}
@@ -1465,8 +1472,8 @@ export default function AdminPortalPage({
             </div>
             <div className="modal-body-custom">
               <p>
-                Apakah Anda yakin ingin menghapus produk <strong>"{deleteConfirmProduct.name}"</strong> dari katalog?
-                Tindakan ini tidak dapat dibatalkan.
+                Apakah Anda yakin ingin menghapus produk <strong>"{deleteConfirmProduct.name}"</strong>?
+                Jika produk pernah dipesan, statusnya akan dinonaktifkan (<code>is_active = false</code>) agar riwayat pesanan tetap aman. Jika belum pernah dipesan, produk dan variannya akan dihapus permanen.
               </p>
             </div>
             <div className="modal-footer-custom">
@@ -1477,16 +1484,15 @@ export default function AdminPortalPage({
                 className="btn-danger-confirm"
                 onClick={async () => {
                   try {
-                    await onDeleteProduct(deleteConfirmProduct.id);
-
-                    showToast(
-                      `Produk "${deleteConfirmProduct.name}" berhasil dihapus.`
-                    );
-
+                    const result = await onDeleteProduct(deleteConfirmProduct.id);
+                    const msg =
+                      result?.mode === 'soft_deleted'
+                        ? `Produk "${deleteConfirmProduct.name}" pernah dipesan sehingga dinonaktifkan (is_active = false).`
+                        : `Produk "${deleteConfirmProduct.name}" berhasil dihapus permanen beserta variannya.`;
+                    showToast(msg);
                     setDeleteConfirmProduct(null);
                   } catch (error) {
-                    console.error('Gagal menghapus produk:', error);
-
+                    console.error('[AdminPortalPage] Gagal menghapus produk:', error);
                     showToast(
                       `Gagal menghapus produk: ${error.message || 'Terjadi kesalahan.'}`
                     );
@@ -1504,111 +1510,252 @@ export default function AdminPortalPage({
 }
 
 // ----------------------------------------------------------------------
-// MODAL: FORM ADD / EDIT PRODUCT
+// MODAL: FORM ADD / EDIT PRODUCT (Sesuai struktur tabel products & product_variants)
 // ----------------------------------------------------------------------
-function ProductFormModal({ isOpen, editingProduct, onClose, onSave }) {
+function ProductFormModal({ editingProduct, onClose, onSave }) {
   const [name, setName] = useState(editingProduct?.name || '');
+  const [slug, setSlug] = useState(editingProduct?.slug || '');
+  const [slugEditedManually, setSlugEditedManually] = useState(Boolean(editingProduct?.slug));
   const [category, setCategory] = useState(editingProduct?.category || 'aksesoris');
-  const [price, setPrice] = useState(editingProduct?.price || 25000);
-  const [originalPrice, setOriginalPrice] = useState(editingProduct?.originalPrice || 30000);
   const [description, setDescription] = useState(editingProduct?.description || '');
-  const [image, setImage] = useState(editingProduct?.image || '/images/tulip-keychain.jpg');
-  const [tag, setTag] = useState(editingProduct?.tag || 'New Arrival');
-  const [specsSize, setSpecsSize] = useState(editingProduct?.specs?.ukuran || '± 10 cm');
-  const [specsMaterial, setSpecsMaterial] = useState(editingProduct?.specs?.bahan || 'Benang Milk Cotton Premium');
-  const [specsTime, setSpecsTime] = useState(editingProduct?.specs?.waktuPengerjaan || '1-2 hari');
-
-  // Colors management
-  const [colors, setColors] = useState(
-    editingProduct?.colors || [
-      { name: 'Soft Pink', hex: '#FF86C1' },
-      { name: 'Cream Daisy', hex: '#FEDEA4' },
-      { name: 'Mint Green', hex: '#5DE5AB' },
-      { name: 'Sky Blue', hex: '#A7D8FF' },
-      { name: 'Lilac', hex: '#EEDBFF' }
-    ]
+  const [note, setNote] = useState(editingProduct?.note || '');
+  const [price, setPrice] = useState(editingProduct?.price ?? '');
+  const [originalPrice, setOriginalPrice] = useState(
+    editingProduct?.original_price ?? editingProduct?.originalPrice ?? ''
   );
-  const [newColorName, setNewColorName] = useState('');
-  const [newColorHex, setNewColorHex] = useState('#FF86C1');
+  const [tag, setTag] = useState(editingProduct?.tag || '');
+  const [tagType, setTagType] = useState(editingProduct?.tag_type ?? editingProduct?.tagType ?? '');
+  const [sortOrder, setSortOrder] = useState(editingProduct?.sort_order ?? 0);
+  const [isActive, setIsActive] = useState(editingProduct ? editingProduct.is_active !== false : true);
+  const [manualStock, setManualStock] = useState(editingProduct?.dbStock ?? editingProduct?.stock ?? 0);
 
-  // Preset images helper
-  const presetImages = [
-    { label: 'Tulip Keychain', url: '/images/tulip-keychain.jpg' },
-    { label: 'Mini Crochet Bag', url: '/images/mini-crochet-bag.jpg' },
-    { label: 'Bear Amigurumi', url: '/images/bear-amigurumi.jpg' },
-    { label: 'Strawberry Pouch', url: '/images/strawberry-pouch.jpg' },
-    { label: 'Bunny Amigurumi', url: '/images/hero-bunny.jpg' }
-  ];
+  // Gambar produk (array URL di images jsonb; urutan pertama menjadi image_url)
+  const [images, setImages] = useState(() => {
+    if (Array.isArray(editingProduct?.images) && editingProduct.images.length > 0) {
+      return editingProduct.images.filter((u) => typeof u === 'string' && u.trim());
+    }
+    if (editingProduct?.image_url || editingProduct?.image) {
+      return [editingProduct.image_url || editingProduct.image];
+    }
+    return [];
+  });
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
-  const handleAddColor = () => {
-    if (!newColorName.trim()) return;
+  // Varian dari tabel product_variants (id, name, color_hex, stock, is_active)
+  const [variants, setVariants] = useState(() => {
+    const src = editingProduct?.allVariants || editingProduct?.variants || [];
+    return src.map((v) => ({
+      id: v.id || null,
+      name: v.name || '',
+      color_hex: v.color_hex || '',
+      useColor: Boolean(v.color_hex),
+      stock: Number(v.stock) || 0,
+      is_active: v.is_active !== false,
+    }));
+  });
 
-    setColors([
-      ...colors,
-      {
-        name: newColorName.trim(),
-        hex: newColorHex,
-        stock: 1
+  // Spesifikasi produk (disimpan sebagai object di kolom specs jsonb)
+  const [specRows, setSpecRows] = useState(() => {
+    const rawSpecs = editingProduct?.specs;
+    if (rawSpecs && typeof rawSpecs === 'object' && !Array.isArray(rawSpecs)) {
+      const entries = Object.entries(rawSpecs).map(([key, value]) => ({
+        key,
+        value: String(value ?? ''),
+      }));
+      if (entries.length > 0) return entries;
+    }
+    return [
+      { key: 'ukuran', value: '' },
+      { key: 'bahan', value: 'Benang Milk Cotton Premium' },
+      { key: 'waktuPengerjaan', value: '1-3 hari' },
+    ];
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const handleNameChange = (val) => {
+    setName(val);
+    if (!slugEditedManually) {
+      setSlug(generateSlugFromName(val));
+    }
+  };
+
+  const handleImageFilesUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    setFormError('');
+    setIsUploadingImage(true);
+    try {
+      const uploadedUrls = [];
+      for (const file of files) {
+        const publicUrl = await uploadProductImage(file);
+        uploadedUrls.push(publicUrl);
       }
-    ]);
-
-    setNewColorName('');
+      setImages((prev) => [...prev, ...uploadedUrls]);
+    } catch (err) {
+      console.error('[ProductFormModal] Upload gambar gagal:', err);
+      setFormError(err.message || 'Gagal mengunggah gambar ke Supabase Storage.');
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
-  const handleRemoveColor = (index) => {
-    setColors(colors.filter((_, i) => i !== index));
-  };
-  const handleUpdateColorStock = (index, value) => {
-    const stock = Math.max(0, Number(value) || 0);
-
-    setColors((prev) =>
-      prev.map((color, i) =>
-        i === index ? { ...color, stock } : color
-      )
-    );
+  const handleMoveImage = (index, direction) => {
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= images.length) return;
+    setImages((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(targetIdx, 0, moved);
+      return next;
+    });
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
+  const handleRemoveImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
 
-    const prodId =
-      editingProduct?.id ||
-      name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '') + `-${Date.now().toString().slice(-4)}`;
-
-    const productPayload = {
-      id: prodId,
-      name: name.trim(),
-      category,
-      price: Number(price),
-      originalPrice: Number(originalPrice) || Number(price),
-      rating: editingProduct?.rating || 5.0,
-      reviewsCount: editingProduct?.reviewsCount || 1,
-      soldCount: editingProduct?.soldCount || 0,
-      tag: tag.trim(),
-      tagType: tag.toLowerCase().includes('best') ? 'bestseller' : 'new',
-      image,
-      images: editingProduct?.images || [image],
-      colors: colors.map((color) => ({
-        name: color.name,
-        hex: color.hex,
-        stock: Math.max(0, Number(color.stock) || 0)
-      })),
-      description: description.trim(),
-      specs: {
-        ukuran: specsSize.trim(),
-        bahan: specsMaterial.trim(),
-        warna: 'Pilihan warna sesuai varian',
-        cocokUntuk: 'Aksesoris, fashion, kado spesial',
-        waktuPengerjaan: specsTime.trim()
+  const handleAddVariantRow = () => {
+    setVariants((prev) => [
+      ...prev,
+      {
+        id: null,
+        name: '',
+        color_hex: '#FF86C1',
+        useColor: true,
+        stock: 1,
+        is_active: true,
       },
-      note: 'Warna dapat sedikit berbeda karena pencahayaan dan resolusi layar.'
+    ]);
+  };
+
+  const handleUpdateVariantRow = (index, patch) => {
+    setVariants((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const handleRemoveVariantRow = (index) => {
+    setVariants((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddSpecRow = () => {
+    setSpecRows((prev) => [...prev, { key: '', value: '' }]);
+  };
+
+  const handleUpdateSpecRow = (index, field, val) => {
+    setSpecRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: val } : row)));
+  };
+
+  const handleRemoveSpecRow = (index) => {
+    setSpecRows((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const hasVariants = variants.length > 0;
+  const calculatedActiveVariantStock = variants
+    .filter((v) => v.is_active)
+    .reduce((sum, v) => sum + Math.max(0, Number(v.stock) || 0), 0);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError('');
+
+    const trimmedName = name.trim();
+    const resolvedSlug = generateSlugFromName(slug || trimmedName);
+    const numPrice = Math.round(Number(price));
+
+    if (!trimmedName) {
+      setFormError('Nama produk wajib diisi.');
+      return;
+    }
+    if (!resolvedSlug) {
+      setFormError('Slug produk wajib diisi (huruf kecil, angka, atau tanda hubung).');
+      return;
+    }
+    if (!Number.isFinite(numPrice) || numPrice <= 0) {
+      setFormError('Harga jual (price) wajib lebih besar dari 0.');
+      return;
+    }
+
+    let parsedOriginalPrice = null;
+    if (String(originalPrice).trim() !== '') {
+      parsedOriginalPrice = Math.round(Number(originalPrice));
+      if (!Number.isFinite(parsedOriginalPrice) || parsedOriginalPrice < numPrice) {
+        setFormError('Harga coret (original_price) harus lebih besar atau sama dengan harga jual.');
+        return;
+      }
+    }
+
+    const seenVariantNames = new Set();
+    const cleanedVariants = [];
+    for (const v of variants) {
+      const vName = String(v.name || '').trim();
+      if (!vName) {
+        setFormError('Setiap baris varian wajib memiliki nama.');
+        return;
+      }
+      const lower = vName.toLowerCase();
+      if (seenVariantNames.has(lower)) {
+        setFormError(`Nama varian "${vName}" duplikat dalam satu produk.`);
+        return;
+      }
+      seenVariantNames.add(lower);
+
+      const vStock = Math.round(Number(v.stock));
+      if (!Number.isFinite(vStock) || vStock < 0) {
+        setFormError(`Stok varian "${vName}" harus 0 atau lebih.`);
+        return;
+      }
+
+      cleanedVariants.push({
+        ...(v.id ? { id: v.id } : {}),
+        name: vName,
+        color_hex: v.useColor && v.color_hex ? v.color_hex.trim() : null,
+        stock: vStock,
+        is_active: v.is_active !== false,
+      });
+    }
+
+    const specsObject = {};
+    specRows.forEach((row) => {
+      const k = String(row.key || '').trim();
+      const val = String(row.value || '').trim();
+      if (k && val) {
+        specsObject[k] = val;
+      }
+    });
+
+    // Payload sesuai kolom asli tabel `products` & `product_variants`
+    // TIDAK menyertakan colors, sold_count, rating, atau reviews_count
+    const productPayload = {
+      name: trimmedName,
+      slug: resolvedSlug,
+      category,
+      description: description.trim(),
+      note: note.trim() || null,
+      price: numPrice,
+      original_price: parsedOriginalPrice,
+      tag: tag.trim() || null,
+      tag_type: tagType.trim() || null,
+      sort_order: Math.round(Number(sortOrder)) || 0,
+      is_active: isActive,
+      image_url: images[0] || null,
+      images,
+      specs: specsObject,
+      variants: cleanedVariants,
+      ...(!hasVariants ? { stock: Math.max(0, Math.round(Number(manualStock) || 0)) } : {}),
     };
 
-    onSave(productPayload);
+    setIsSaving(true);
+    try {
+      await onSave(productPayload);
+    } catch (error) {
+      console.error('[ProductFormModal] Gagal menyimpan produk:', error);
+      setFormError(error.message || 'Gagal menyimpan produk ke database.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -1619,30 +1766,64 @@ function ProductFormModal({ isOpen, editingProduct, onClose, onSave }) {
             <Sparkles size={20} color="#FF86C1" />
             <h3>{editingProduct ? 'Edit Produk Rajut' : 'Tambah Produk Baru'}</h3>
           </div>
-          <button className="btn-close-modal" onClick={onClose}>
+          <button type="button" className="btn-close-modal" onClick={onClose}>
             ✕
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="modal-body-custom modal-form-scrollable">
-            {/* Form grid */}
+            {formError && (
+              <div
+                style={{
+                  background: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#B91C1C',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  fontSize: '0.86rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>{formError}</span>
+              </div>
+            )}
+
             <div className="product-form-grid">
-              {/* Product Name */}
-              <div className="form-group-custom full-width">
-                <label>Nama Produk Rajut *</label>
+              {/* Name */}
+              <div className="form-group-custom half-width">
+                <label>Nama Produk *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Sunflower Crochet Coaster, Daisy Sling Bag..."
+                  placeholder="Contoh: Keychain Bunga, Pouch Mini..."
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                />
+              </div>
+
+              {/* Slug (otomatis dari name, unik) */}
+              <div className="form-group-custom half-width">
+                <label>Slug (otomatis & unik) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="keychain-bunga"
+                  value={slug}
+                  onChange={(e) => {
+                    setSlugEditedManually(true);
+                    setSlug(e.target.value);
+                  }}
                 />
               </div>
 
               {/* Category */}
               <div className="form-group-custom half-width">
-                <label>Kategori Produk *</label>
+                <label>Kategori *</label>
                 <select value={category} onChange={(e) => setCategory(e.target.value)}>
                   {CATEGORIES.filter((c) => c.id !== 'all').map((c) => (
                     <option key={c.id} value={c.id}>
@@ -1652,15 +1833,36 @@ function ProductFormModal({ isOpen, editingProduct, onClose, onSave }) {
                 </select>
               </div>
 
-              {/* Tag / Badge */}
+              {/* Sort Order & Status Aktif */}
               <div className="form-group-custom half-width">
-                <label>Label Promo / Badge</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Best Seller, New Arrival, Promo Launching"
-                  value={tag}
-                  onChange={(e) => setTag(e.target.value)}
-                />
+                <label>Urutan Tampil (sort_order) & Status</label>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                    style={{ width: '100px' }}
+                    title="Urutan tampil produk (semakin kecil tampil lebih dulu)"
+                  />
+                  <label
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      margin: 0,
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      color: isActive ? '#15803D' : '#991B1B'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={(e) => setIsActive(e.target.checked)}
+                    />
+                    <span>{isActive ? 'Aktif (Tampil di Toko)' : 'Nonaktif (Disembunyikan)'}</span>
+                  </label>
+                </div>
               </div>
 
               {/* Price */}
@@ -1669,105 +1871,323 @@ function ProductFormModal({ isOpen, editingProduct, onClose, onSave }) {
                 <input
                   type="number"
                   required
-                  min="1000"
-                  step="500"
+                  min="1"
+                  step="100"
+                  placeholder="Contoh: 15000"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                 />
               </div>
 
-              {/* Original Price */}
+              {/* Original Price (opsional, >= price) */}
               <div className="form-group-custom half-width">
-                <label>Harga Asli / Coret (Rp)</label>
+                <label>Harga Coret / Asli (opsional, ≥ harga jual)</label>
                 <input
                   type="number"
                   min="0"
-                  step="500"
-                  placeholder="Kosongkan jika tidak ada diskon"
+                  step="100"
+                  placeholder="Kosongkan jika tidak ada harga coret"
                   value={originalPrice}
                   onChange={(e) => setOriginalPrice(e.target.value)}
                 />
               </div>
 
-              {/* Image Preview & URL */}
-              <div className="form-group-custom full-width">
-                <label>Foto Produk Utama (URL atau Pilih Preset)</label>
-                <div className="image-input-container">
-                  <div className="img-preview-box">
-                    <img
-                      src={getSafeProductImage(image, name || 'Preview Produk')}
-                      alt="Preview"
-                      onError={(e) => handleProductImageError(e, name || 'Preview Produk', image)}
-                    />
-                  </div>
-                  <div className="img-inputs-col">
-                    <input
-                      type="text"
-                      placeholder="Masukkan URL gambar atau pilih preset di bawah"
-                      value={image}
-                      onChange={(e) => setImage(e.target.value)}
-                    />
+              {/* Tag & Tag Type */}
+              <div className="form-group-custom half-width">
+                <label>Label / Tag (opsional)</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Best Seller, New Arrival"
+                  value={tag}
+                  onChange={(e) => setTag(e.target.value)}
+                />
+              </div>
 
-                    <div className="preset-buttons-row">
-                      <span className="preset-label">Pilihan Preset Cepat:</span>
-                      <div className="presets-wrap">
-                        {presetImages.map((p, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            className={`btn-preset-thumb ${image === p.url ? 'active' : ''}`}
-                            onClick={() => setImage(p.url)}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+              <div className="form-group-custom half-width">
+                <label>Tipe Label (tag_type)</label>
+                <select value={tagType} onChange={(e) => setTagType(e.target.value)}>
+                  <option value="">Tanpa Tipe Khusus</option>
+                  <option value="bestseller">Best Seller (bestseller)</option>
+                  <option value="new">New Arrival (new)</option>
+                  <option value="madetoorder">Made to Order (madetoorder)</option>
+                </select>
+              </div>
+
+              {/* Stok Manual (HANYA jika produk tidak memiliki varian) */}
+              <div className="form-group-custom full-width">
+                <label>Stok Produk</label>
+                {hasVariants ? (
+                  <div
+                    style={{
+                      background: '#F0FDF4',
+                      border: '1px solid #BBF7D0',
+                      borderRadius: '10px',
+                      padding: '10px 14px',
+                      fontSize: '0.84rem',
+                      color: '#166534'
+                    }}
+                  >
+                    Total stok varian aktif saat ini: <strong>{calculatedActiveVariantStock}</strong>.{' '}
+                    Kolom <code>products.stock</code> dihitung otomatis oleh trigger database (<code>sync_product_stock</code>).
                   </div>
+                ) : (
+                  <input
+                    type="number"
+                    min="0"
+                    value={manualStock}
+                    onChange={(e) => setManualStock(e.target.value)}
+                    placeholder="Masukkan stok produk (karena belum ada varian)"
+                  />
+                )}
+              </div>
+
+              {/* Upload Gambar ke Supabase Storage bucket `product-images` */}
+              <div className="form-group-custom full-width">
+                <label>Foto Produk (Upload ke bucket product-images • JPG/PNG/WEBP, maks 2 MB)</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <label
+                      className="btn-sm btn-outline-pink"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: isUploadingImage ? 'wait' : 'pointer',
+                        margin: 0
+                      }}
+                    >
+                      <Upload size={15} />
+                      <span>{isUploadingImage ? 'Mengunggah...' : 'Upload Foto Produk'}</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                        multiple
+                        disabled={isUploadingImage}
+                        onChange={handleImageFilesUpload}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    <span style={{ fontSize: '0.78rem', color: '#6B7280' }}>
+                      Foto pertama otomatis menjadi foto utama (<code>image_url</code>). Semua foto disimpan di <code>images</code>.
+                    </span>
+                  </div>
+
+                  {images.length > 0 ? (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                        gap: '10px'
+                      }}
+                    >
+                      {images.map((url, idx) => (
+                        <div
+                          key={`${url}-${idx}`}
+                          style={{
+                            border: idx === 0 ? '2px solid #FF86C1' : '1px solid #E5E7EB',
+                            borderRadius: '10px',
+                            padding: '6px',
+                            background: '#fff',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px'
+                          }}
+                        >
+                          <div style={{ position: 'relative', aspectRatio: '1/1', overflow: 'hidden', borderRadius: '6px', background: '#FAF4EE' }}>
+                            <img
+                              src={getSafeProductImage(url, name || 'Foto Produk')}
+                              alt={`Foto ${idx + 1}`}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => handleProductImageError(e, name || 'Foto Produk', url)}
+                            />
+                            {idx === 0 && (
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  top: '4px',
+                                  left: '4px',
+                                  background: '#FF86C1',
+                                  color: '#fff',
+                                  fontSize: '0.65rem',
+                                  fontWeight: 700,
+                                  padding: '2px 6px',
+                                  borderRadius: '999px'
+                                }}
+                              >
+                                Utama
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '4px' }}>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              style={{ padding: '2px 6px', fontSize: '0.75rem' }}
+                              disabled={idx === 0}
+                              onClick={() => handleMoveImage(idx, -1)}
+                              title="Geser kiri"
+                            >
+                              <ChevronLeft size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              style={{ padding: '2px 6px', fontSize: '0.75rem' }}
+                              disabled={idx === images.length - 1}
+                              onClick={() => handleMoveImage(idx, 1)}
+                              title="Geser kanan"
+                            >
+                              <ChevronRight size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-del-chip"
+                              onClick={() => handleRemoveImage(idx)}
+                              title="Hapus foto"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        border: '1px dashed #E5E7EB',
+                        borderRadius: '10px',
+                        padding: '14px',
+                        fontSize: '0.82rem',
+                        color: '#6B7280',
+                        textAlign: 'center'
+                      }}
+                    >
+                      Belum ada foto produk. Klik tombol "Upload Foto Produk" di atas.
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Description */}
               <div className="form-group-custom full-width">
-                <label>Deskripsi Produk *</label>
+                <label>Deskripsi Produk</label>
                 <textarea
                   rows={3}
-                  required
-                  placeholder="Ceritakan detail keunikan produk, sentuhan handmade, kegunaan, dan kelebihannya..."
+                  placeholder="Ceritakan detail keunikan produk, bahan, dan kegunaannya..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
 
-              {/* Color Variants */}
+              {/* Note */}
               <div className="form-group-custom full-width">
-                <label>Varian Warna Benang yang Tersedia</label>
-                <div className="colors-management-block">
-                  <div className="colors-chips-list">
-                    {colors.map((c, idx) => (
-                      <div key={idx} className="color-chip">
-                        <span
-                          className="color-dot"
-                          style={{ backgroundColor: c.hex }}
+                <label>Catatan Produk (note)</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Warna dapat sedikit berbeda karena pencahayaan layar."
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+              </div>
+
+              {/* Variants (tabel product_variants) */}
+              <div className="form-group-custom full-width">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ margin: 0 }}>Varian Produk (tabel product_variants)</label>
+                  <button
+                    type="button"
+                    className="btn-sm btn-outline-pink"
+                    onClick={handleAddVariantRow}
+                  >
+                    + Tambah Baris Varian
+                  </button>
+                </div>
+
+                {variants.length === 0 ? (
+                  <div
+                    style={{
+                      border: '1px dashed #E5E7EB',
+                      borderRadius: '10px',
+                      padding: '12px',
+                      fontSize: '0.82rem',
+                      color: '#6B7280'
+                    }}
+                  >
+                    Belum ada varian. Produk tanpa varian memakai stok manual di atas. Klik "+ Tambah Baris Varian" untuk menambah varian warna/model.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {variants.map((v, idx) => (
+                      <div
+                        key={v.id || `new-${idx}`}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.4fr auto 90px auto auto',
+                          gap: '8px',
+                          alignItems: 'center',
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          border: '1px solid #E5E7EB',
+                          background: v.is_active ? '#fff' : '#F9FAFB'
+                        }}
+                      >
+                        <input
+                          type="text"
+                          required
+                          placeholder="Nama varian (unik)"
+                          value={v.name}
+                          onChange={(e) => handleUpdateVariantRow(idx, { name: e.target.value })}
                         />
 
-                        <span>{c.name}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input
+                            type="checkbox"
+                            checked={v.useColor}
+                            onChange={(e) =>
+                              handleUpdateVariantRow(idx, {
+                                useColor: e.target.checked,
+                                color_hex: e.target.checked ? (v.color_hex || '#FF86C1') : ''
+                              })
+                            }
+                            title="Aktifkan/nonaktifkan warna hex (opsional)"
+                          />
+                          {v.useColor ? (
+                            <input
+                              type="color"
+                              value={v.color_hex || '#FF86C1'}
+                              onChange={(e) => handleUpdateVariantRow(idx, { color_hex: e.target.value })}
+                              className="color-picker-input"
+                              title="Pilih warna varian"
+                            />
+                          ) : (
+                            <span style={{ fontSize: '0.72rem', color: '#9CA3AF' }}>Tanpa warna</span>
+                          )}
+                        </div>
 
                         <input
                           type="number"
                           min="0"
-                          value={c.stock ?? 1}
+                          value={v.stock}
                           onChange={(e) =>
-                            handleUpdateColorStock(idx, e.target.value)
+                            handleUpdateVariantRow(idx, { stock: Math.max(0, Number(e.target.value) || 0) })
                           }
-                          className="color-stock-input"
-                          title="Jumlah stok varian"
+                          title="Stok varian (>= 0)"
+                          placeholder="Stok"
                         />
+
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', margin: 0, fontSize: '0.78rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={v.is_active}
+                            onChange={(e) => handleUpdateVariantRow(idx, { is_active: e.target.checked })}
+                          />
+                          <span>Aktif</span>
+                        </label>
 
                         <button
                           type="button"
                           className="btn-del-chip"
-                          onClick={() => handleRemoveColor(idx)}
+                          onClick={() => handleRemoveVariantRow(idx)}
                           title="Hapus varian"
                         >
                           ✕
@@ -1775,70 +2195,68 @@ function ProductFormModal({ isOpen, editingProduct, onClose, onSave }) {
                       </div>
                     ))}
                   </div>
-                  <div className="add-color-input-row">
-                    <input
-                      type="color"
-                      value={newColorHex}
-                      onChange={(e) => setNewColorHex(e.target.value)}
-                      className="color-picker-input"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Nama warna (misal: Dusty Pink, Sage Green...)"
-                      value={newColorName}
-                      onChange={(e) => setNewColorName(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn-sm btn-outline-pink"
-                      onClick={handleAddColor}
-                    >
-                      + Tambah Varian
-                    </button>
-                  </div>
+                )}
+              </div>
+
+              {/* Specs (daftar spesifikasi dinamis di kolom specs jsonb) */}
+              <div className="form-group-custom full-width">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ margin: 0 }}>Spesifikasi Produk (specs)</label>
+                  <button
+                    type="button"
+                    className="btn-sm btn-outline-pink"
+                    onClick={handleAddSpecRow}
+                  >
+                    + Tambah Spesifikasi
+                  </button>
                 </div>
-              </div>
 
-              {/* Specs */}
-              <div className="form-group-custom one-third">
-                <label>Ukuran Produk</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: ± 8 cm x 12 cm"
-                  value={specsSize}
-                  onChange={(e) => setSpecsSize(e.target.value)}
-                />
-              </div>
-
-              <div className="form-group-custom one-third">
-                <label>Bahan Benang</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Milk Cotton 5 ply"
-                  value={specsMaterial}
-                  onChange={(e) => setSpecsMaterial(e.target.value)}
-                />
-              </div>
-
-              <div className="form-group-custom one-third">
-                <label>Waktu Pengerjaan</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Ready Stock / 1-2 hari"
-                  value={specsTime}
-                  onChange={(e) => setSpecsTime(e.target.value)}
-                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {specRows.map((row, idx) => (
+                    <div
+                      key={idx}
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr auto', gap: '8px', alignItems: 'center' }}
+                    >
+                      <input
+                        type="text"
+                        placeholder="Label (misal: bahan, ukuran)"
+                        value={row.key}
+                        onChange={(e) => handleUpdateSpecRow(idx, 'key', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Nilai (misal: Milk Cotton 5 ply)"
+                        value={row.value}
+                        onChange={(e) => handleUpdateSpecRow(idx, 'value', e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn-del-chip"
+                        onClick={() => handleRemoveSpecRow(idx)}
+                        title="Hapus baris spesifikasi"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
           <div className="modal-footer-custom">
-            <button type="button" className="btn-secondary" onClick={onClose}>
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={isSaving || isUploadingImage}>
               Batal
             </button>
-            <button type="submit" className="btn-primary">
+            <button type="submit" className="btn-primary" disabled={isSaving || isUploadingImage}>
               <CheckCircle2 size={16} />
-              <span>{editingProduct ? 'Simpan Perubahan' : 'Tambahkan Produk ke Toko'}</span>
+              <span>
+                {isSaving
+                  ? 'Menyimpan...'
+                  : editingProduct
+                  ? 'Simpan Perubahan'
+                  : 'Tambahkan Produk ke Toko'}
+              </span>
             </button>
           </div>
         </form>
