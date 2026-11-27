@@ -3,7 +3,6 @@ export const CATEGORIES = [
   { id: 'aksesoris', name: 'Aksesoris', icon: 'Heart', color: '#5DE5AB' },
   { id: 'tas-rajut', name: 'Tas Rajut', icon: 'ShoppingBag', color: '#A7D8FF' },
   { id: 'amigurumi', name: 'Amigurumi', icon: 'Smile', color: '#FEDEA4' },
-  { id: 'alat-benang', name: 'Alat & Benang', icon: 'Scissors', color: '#FEDEA4' }
 ];
 
 // Data produk tidak lagi disimpan lokal agar tidak bentrok dengan database.

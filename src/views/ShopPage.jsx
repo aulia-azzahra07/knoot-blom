@@ -32,7 +32,6 @@ export default function ShopPage({
     { id: 'amigurumi', label: 'Amigurumi' },
     { id: 'tas-rajut', label: 'Tas Rajut' },
     { id: 'aksesoris', label: 'Aksesoris' },
-    { id: 'alat-benang', label: 'Alat & Benang' }
   ];
 
   const isPriceFiltered = minPrice > PRICE_MIN_LIMIT || maxPrice < PRICE_MAX_LIMIT;
