@@ -299,7 +299,7 @@ export default function MyAccountPage({
   useEffect(() => {
     if (!currentUser?.id) return;
     let isMounted = true;
-    let unsub = () => {};
+    let unsub = () => { };
 
     getOrCreateCustomerConversation(currentUser.id, currentUser.name)
       .then((conv) => {
@@ -345,14 +345,16 @@ export default function MyAccountPage({
   // KEAMANAN: HANYA TAMPILKAN PESANAN MILIK USER YANG LOGIN
   // Filter ketat berdasarkan user_id dari sesi login pengguna
   // ========================================================
-  const loggedInUserId = currentUser?.id || 'user-naila-1';
-  const isCustomerRole = (currentUser?.role || 'customer') === 'customer';
+  const loggedInUserId = currentUser?.id || null;
+  const isCustomerRole = currentUser?.role === 'customer';
 
   // Saring pesanan dari database: hanya yang user_id nya sesuai dengan akun yang login
-  const authorizedUserOrders = rawOrdersList.filter((o) => {
-    if (!o.user_id && !o.userId) return true; // Pesanan lokal sesi saat ini
-    return o.user_id === loggedInUserId || o.userId === loggedInUserId;
-  });
+  const authorizedUserOrders = loggedInUserId
+    ? rawOrdersList.filter((o) => {
+        if (!o.user_id && !o.userId) return true; // Pesanan lokal sesi saat ini
+        return o.user_id === loggedInUserId || o.userId === loggedInUserId;
+      })
+    : [];
 
   // Tampilkan demo pesanan jika list pesanan kosong atau tombol demo diaktifkan
   const isUsingDemo = authorizedUserOrders.length === 0 || forceShowDemo;
@@ -395,8 +397,8 @@ export default function MyAccountPage({
     (o) => o.status === 'Selesai'
   ).length;
 
-  const userName = currentUser?.name || 'Naila Alfathonah';
-  const userEmail = currentUser?.email || 'nailaa@gmail.com';
+  const userName = currentUser?.name || '';
+  const userEmail = currentUser?.email || '';
   const userAvatar =
     currentUser?.avatar ||
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
@@ -638,44 +640,42 @@ export default function MyAccountPage({
                 const orderTimelineHistory = Array.isArray(selectedTrackingOrder.history) && selectedTrackingOrder.history.length > 0
                   ? selectedTrackingOrder.history
                   : [
-                      {
-                        status: 'Dirajut',
-                        keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
-                        created_at: selectedTrackingOrder.created_at || selectedTrackingOrder.date
-                      },
-                      ...(selectedTrackingOrder.status === 'Packing' || selectedTrackingOrder.status === 'Diantar' || selectedTrackingOrder.status === 'Selesai'
-                        ? [{
-                            status: 'Packing',
-                            keterangan: 'Rajutan selesai! Pesanan dikemas rapi oleh tim Knot & Bloom dan siap diantar.',
-                            created_at: selectedTrackingOrder.date
-                          }]
-                        : []),
-                      ...(selectedTrackingOrder.status === 'Diantar' || selectedTrackingOrder.status === 'Selesai'
-                        ? [{
-                            status: 'Diantar',
-                            keterangan: `Pesanan diantar langsung oleh tim Knot & Bloom.${
-                              selectedTrackingOrder.estimasi_antar ? ` Estimasi: ${selectedTrackingOrder.estimasi_antar}.` : ''
-                            }${
-                              selectedTrackingOrder.pengantar ? ` Pengantar: ${selectedTrackingOrder.pengantar}.` : ''
-                            }`,
-                            created_at: selectedTrackingOrder.date
-                          }]
-                        : []),
-                      ...(selectedTrackingOrder.status === 'Selesai'
-                        ? [{
-                            status: 'Selesai',
-                            keterangan: 'Pesanan telah diterima pembeli dan pembayaran tunai (COD) telah dibayar lunas.',
-                            created_at: selectedTrackingOrder.date
-                          }]
-                        : []),
-                      ...(selectedTrackingOrder.status === 'Dibatalkan'
-                        ? [{
-                            status: 'Dibatalkan',
-                            keterangan: `Pesanan dibatalkan. Alasan: ${selectedTrackingOrder.alasan_batal || '-'}`,
-                            created_at: selectedTrackingOrder.date
-                          }]
-                        : [])
-                    ];
+                    {
+                      status: 'Dirajut',
+                      keterangan: 'Pesanan COD berhasil dibuat. Tim Knot & Bloom mulai merajut pesananmu.',
+                      created_at: selectedTrackingOrder.created_at || selectedTrackingOrder.date
+                    },
+                    ...(selectedTrackingOrder.status === 'Packing' || selectedTrackingOrder.status === 'Diantar' || selectedTrackingOrder.status === 'Selesai'
+                      ? [{
+                        status: 'Packing',
+                        keterangan: 'Rajutan selesai! Pesanan dikemas rapi oleh tim Knot & Bloom dan siap diantar.',
+                        created_at: selectedTrackingOrder.date
+                      }]
+                      : []),
+                    ...(selectedTrackingOrder.status === 'Diantar' || selectedTrackingOrder.status === 'Selesai'
+                      ? [{
+                        status: 'Diantar',
+                        keterangan: `Pesanan diantar langsung oleh tim Knot & Bloom.${selectedTrackingOrder.estimasi_antar ? ` Estimasi: ${selectedTrackingOrder.estimasi_antar}.` : ''
+                          }${selectedTrackingOrder.pengantar ? ` Pengantar: ${selectedTrackingOrder.pengantar}.` : ''
+                          }`,
+                        created_at: selectedTrackingOrder.date
+                      }]
+                      : []),
+                    ...(selectedTrackingOrder.status === 'Selesai'
+                      ? [{
+                        status: 'Selesai',
+                        keterangan: 'Pesanan telah diterima pembeli dan pembayaran tunai (COD) telah dibayar lunas.',
+                        created_at: selectedTrackingOrder.date
+                      }]
+                      : []),
+                    ...(selectedTrackingOrder.status === 'Dibatalkan'
+                      ? [{
+                        status: 'Dibatalkan',
+                        keterangan: `Pesanan dibatalkan. Alasan: ${selectedTrackingOrder.alasan_batal || '-'}`,
+                        created_at: selectedTrackingOrder.date
+                      }]
+                      : [])
+                  ];
 
                 return (
                   <div className="detail-tracking-view fade-in">
@@ -695,19 +695,18 @@ export default function MyAccountPage({
                           No. Pesanan: <strong>#{selectedTrackingOrder.id}</strong>
                         </span>
                         <span
-                          className={`order-status-badge ${
-                            selectedTrackingOrder.status === 'Dirajut'
-                              ? 'status-processing'
-                              : selectedTrackingOrder.status === 'Packing'
+                          className={`order-status-badge ${selectedTrackingOrder.status === 'Dirajut'
+                            ? 'status-processing'
+                            : selectedTrackingOrder.status === 'Packing'
                               ? 'status-shipping'
                               : selectedTrackingOrder.status === 'Diantar'
-                              ? 'status-shipping'
-                              : selectedTrackingOrder.status === 'Selesai'
-                              ? 'status-completed'
-                              : selectedTrackingOrder.status === 'Dibatalkan'
-                              ? 'status-cancelled'
-                              : 'status-pending'
-                          }`}
+                                ? 'status-shipping'
+                                : selectedTrackingOrder.status === 'Selesai'
+                                  ? 'status-completed'
+                                  : selectedTrackingOrder.status === 'Dibatalkan'
+                                    ? 'status-cancelled'
+                                    : 'status-pending'
+                            }`}
                         >
                           {selectedTrackingOrder.status}
                         </span>
@@ -738,9 +737,9 @@ export default function MyAccountPage({
                       onScrollToReview={
                         selectedTrackingOrder.status === 'Selesai' && selectedTrackingOrder.dbId
                           ? () => {
-                              const el = document.getElementById('order-review-section');
-                              if (el) el.scrollIntoView({ behavior: 'smooth' });
-                            }
+                            const el = document.getElementById('order-review-section');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }
                           : null
                       }
                     />
@@ -757,14 +756,14 @@ export default function MyAccountPage({
                           const isLast = sIdx === orderTimelineHistory.length - 1;
                           const formattedTime = step.created_at
                             ? (step.created_at.includes('WIB')
-                                ? step.created_at
-                                : new Date(step.created_at).toLocaleString('id-ID', {
-                                    day: 'numeric',
-                                    month: 'short',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  }) + ' WIB')
+                              ? step.created_at
+                              : new Date(step.created_at).toLocaleString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) + ' WIB')
                             : 'Waktu Tercatat';
 
                           return (
@@ -1159,17 +1158,16 @@ export default function MyAccountPage({
 
                               <div className="order-right-meta">
                                 <span
-                                  className={`order-status-badge ${
-                                    order.status === 'Dirajut'
-                                      ? 'status-processing'
-                                      : order.status === 'Packing' || order.status === 'Diantar'
+                                  className={`order-status-badge ${order.status === 'Dirajut'
+                                    ? 'status-processing'
+                                    : order.status === 'Packing' || order.status === 'Diantar'
                                       ? 'status-shipping'
                                       : order.status === 'Selesai'
-                                      ? 'status-completed'
-                                      : order.status === 'Dibatalkan'
-                                      ? 'status-cancelled'
-                                      : 'status-pending'
-                                  }`}
+                                        ? 'status-completed'
+                                        : order.status === 'Dibatalkan'
+                                          ? 'status-cancelled'
+                                          : 'status-pending'
+                                    }`}
                                 >
                                   {order.status}
                                 </span>

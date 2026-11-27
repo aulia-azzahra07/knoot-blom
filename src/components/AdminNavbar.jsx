@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Store, Shield, User } from 'lucide-react';
+import { ShoppingBag, Store, Shield, User, LogOut } from 'lucide-react';
 
 export default function AdminNavbar({
   onSwitchRole,
@@ -74,15 +74,26 @@ export default function AdminNavbar({
             </div>
           </div>
 
-          {/* Single clean button to switch to customer store */}
+          {/* Single clean button to preview customer store */}
           <button
             className="btn-admin-view-store"
             onClick={() => onSwitchRole('customer')}
-            title="Beralih ke tampilan toko pembeli"
+            title="Lihat tampilan toko pembeli"
           >
             <Store size={15} />
             <span>Ke Toko Pembeli</span>
           </button>
+
+          {onLogout && (
+            <button
+              className="btn-admin-view-store"
+              onClick={onLogout}
+              title="Keluar dari akun Admin"
+            >
+              <LogOut size={15} />
+              <span>Keluar</span>
+            </button>
+          )}
         </div>
       </nav>
     </header>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import AdminNavbar from './components/AdminNavbar';
 import Footer from './components/Footer';
@@ -20,8 +20,13 @@ import { fetchProducts } from './services/productService';
 import { fetchOrders, updateOrderStatusOnServer, subscribeToOrders } from './services/orderService';
 import { fetchAllReviews } from './services/reviewService';
 import { supabase } from './lib/supabase';
-import { getCurrentUserWithRole, logoutUser } from './services/authService';
-import { Heart, CheckCircle2, Sparkles, Shield } from 'lucide-react';
+import {
+  clearLegacyAuthStorage,
+  getInitialSessionUser,
+  resolveUserProfileFromSession,
+  logoutUser
+} from './services/authService';
+import { CheckCircle2 } from 'lucide-react';
 import './App.css';
 
 // Filter untuk memastikan tidak ada data dummy lama
@@ -51,46 +56,100 @@ const isRemovedLegacyItem = (item) => {
 };
 
 export default function App() {
-  // ── AUTH STATE ───────────────────────────────────────────────────────
-  // null = belum dicek, false = tidak login, object = sudah login
+  // ── AUTH STATE (Default selalu guest = null, role diturunkan hanya dari sesi Supabase asli) ──
   const [currentUser, setCurrentUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true); // cegah flash halaman sebelum auth selesai
+  const [authLoading, setAuthLoading] = useState(true); // cegah kedipan guest -> login sebelum getSession selesai
+  // Mode preview toko khusus admin (TIDAK mengubah role asli, tidak dipakai oleh guest/customer)
+  const [adminStorePreview, setAdminStorePreview] = useState(false);
 
-  // Role state: 'customer' | 'admin' — diinisialisasi dari localStorage, bisa diswitch manual
-  const [currentRole, setCurrentRole] = useState(() => {
-    try {
-      return localStorage.getItem('kb_role') || 'customer';
-    } catch {
-      return 'customer';
+  // Role asli: null untuk guest, 'customer' atau 'admin' untuk user yang login
+  const userRole = currentUser ? currentUser.role : null;
+  const isAdminMode = userRole === 'admin' && !adminStorePreview;
+
+  // Simpan halaman tujuan jika guest mencoba akses halaman wajib login
+  const pendingViewRef = useRef(null);
+  const lastNavigatedUserIdRef = useRef(null);
+
+  const navigateAfterLogin = (userProfile) => {
+    if (!userProfile) return;
+    const targetView = pendingViewRef.current;
+    pendingViewRef.current = null;
+    lastNavigatedUserIdRef.current = userProfile.id;
+
+    if (userProfile.role === 'admin') {
+      setAdminStorePreview(false);
+      setCurrentView('admin');
+      return;
     }
-  });
 
-  // Dengarkan perubahan sesi Supabase Auth secara realtime
+    setAdminStorePreview(false);
+    if (targetView && targetView !== 'admin' && targetView !== 'login') {
+      setCurrentView(targetView);
+    } else {
+      setCurrentView('home');
+    }
+  };
+
+  // Cek sesi Supabase sekali lewat getSession(), lalu sinkronkan via onAuthStateChange
   useEffect(() => {
-    // Cek sesi yang sudah ada saat app pertama dimuat
-    getCurrentUserWithRole().then((userProfile) => {
-      setCurrentUser(userProfile || false);
-      setAuthLoading(false);
+    let isMounted = true;
+
+    // Bersihkan key auth/role lama buatan aplikasi tanpa menyentuh key sesi Supabase (sb-*-auth-token)
+    clearLegacyAuthStorage();
+
+    getInitialSessionUser()
+      .then((userProfile) => {
+        if (!isMounted) return;
+        setCurrentUser(userProfile);
+        if (userProfile?.role === 'admin') {
+          lastNavigatedUserIdRef.current = userProfile.id;
+          setAdminStorePreview(false);
+          setCurrentView((prev) => (prev === 'home' || prev === 'login' || prev === 'account' ? 'admin' : prev));
+        }
+      })
+      .finally(() => {
+        if (isMounted) setAuthLoading(false);
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_OUT') {
+        lastNavigatedUserIdRef.current = null;
+        pendingViewRef.current = null;
+        setCurrentUser(null);
+        setAdminStorePreview(false);
+        setOrders([]);
+        try { localStorage.removeItem('kb_orders'); } catch {}
+        setCurrentView('home');
+        try {
+          const p = window.location.pathname.toLowerCase();
+          if (p === '/lacak-pesanan' || p === '/admin' || p.startsWith('/admin/')) {
+            window.history.replaceState({}, '', '/');
+          }
+        } catch {}
+        return;
+      }
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        // Defer query Supabase di luar callback onAuthStateChange agar tidak terjadi auth-lock deadlock
+        setTimeout(async () => {
+          if (!isMounted) return;
+          const userProfile = await resolveUserProfileFromSession(session);
+          if (!isMounted) return;
+          setCurrentUser(userProfile);
+
+          if (event === 'SIGNED_IN' && userProfile && lastNavigatedUserIdRef.current !== userProfile.id) {
+            navigateAfterLogin(userProfile);
+          }
+        }, 0);
+      }
     });
 
-    // Dengarkan event login/logout/token refresh
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('[Auth] State changed:', event, session?.user?.email);
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          const userProfile = await getCurrentUserWithRole();
-          setCurrentUser(userProfile || false);
-          if (userProfile?.role === 'admin') {
-            setCurrentView('admin');
-          }
-        } else if (event === 'SIGNED_OUT') {
-          setCurrentUser(false);
-          setCurrentView('home');
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // ── PRODUK & ULASAN (Satu sumber saja: Supabase) ──────────────────────
@@ -116,28 +175,21 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
-  // ── PESANAN ──────────────────────────────────────────────────────────
-  const [orders, setOrders] = useState(() => {
-    try {
-      const saved = localStorage.getItem('kb_orders');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const realOnly = parsed.filter(isRealOrder);
-          if (realOnly.length > 0) return realOnly;
-        }
-      }
-    } catch (e) {}
-    return [];
-  });
+  // ── PESANAN (Hanya dimuat untuk pengguna yang login; guest tidak melihat data pesanan) ──
+  const [orders, setOrders] = useState([]);
 
   useEffect(() => {
+    if (authLoading || !currentUser) {
+      setOrders([]);
+      return;
+    }
+
     let isMounted = true;
     const loadFreshOrders = async () => {
       try {
         const loaded = await fetchOrders();
         if (isMounted && Array.isArray(loaded)) {
-          setOrders(loaded);
+          setOrders(loaded.filter(isRealOrder));
           try { localStorage.setItem('kb_orders', JSON.stringify(loaded)); } catch {}
         }
       } catch (err) {
@@ -148,7 +200,7 @@ export default function App() {
     loadFreshOrders();
     const unsubscribe = subscribeToOrders((fresh) => {
       if (isMounted && Array.isArray(fresh)) {
-        setOrders(fresh);
+        setOrders(fresh.filter(isRealOrder));
         try { localStorage.setItem('kb_orders', JSON.stringify(fresh)); } catch {}
       }
     });
@@ -159,7 +211,7 @@ export default function App() {
       if (typeof unsubscribe === 'function') unsubscribe();
       clearInterval(intervalId);
     };
-  }, []);
+  }, [authLoading, currentUser?.id]);
 
   // ── NAVIGASI ─────────────────────────────────────────────────────────
   const [currentView, setCurrentView] = useState(() => {
@@ -169,21 +221,26 @@ export default function App() {
         window.history.replaceState({}, '', '/');
         return 'shop';
       }
+      if (path === '/admin' || path.startsWith('/admin/')) {
+        return 'admin';
+      }
       if (path === '/lacak-pesanan') return 'account';
-      const savedRole = localStorage.getItem('kb_role');
-      if (savedRole === 'admin') return 'admin';
     } catch {}
     return 'home';
   });
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Dengarkan tombol Back/Forward browser untuk route /lacak-pesanan dan redirect route lama
+  // Dengarkan tombol Back/Forward browser untuk route /lacak-pesanan, /admin, dan redirect route lama
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.toLowerCase();
       if (path === '/diy-kit' || path.startsWith('/diy-kit/')) {
         window.history.replaceState({}, '', '/');
         setCurrentView('shop');
+        return;
+      }
+      if (path === '/admin' || path.startsWith('/admin/')) {
+        setCurrentView('admin');
         return;
       }
       if (path === '/lacak-pesanan') {
@@ -246,15 +303,14 @@ export default function App() {
   const ADMIN_ONLY_VIEWS = ['admin'];
 
   useEffect(() => {
-    if (authLoading) return; // tunggu auth selesai dicek
+    if (authLoading) return; // tunggu getSession selesai dicek
 
     // Admin yang membuka /lacak-pesanan atau halaman Lacak Pesanan diarahkan ke Panel Admin
     if (
       currentUser?.role === 'admin' &&
       (currentView === 'account' || window.location.pathname === '/lacak-pesanan')
     ) {
-      setCurrentRole('admin');
-      try { localStorage.setItem('kb_role', 'admin'); } catch {}
+      setAdminStorePreview(false);
       setCurrentView('admin');
       if (window.location.pathname === '/lacak-pesanan') {
         window.history.replaceState({}, '', '/');
@@ -263,20 +319,42 @@ export default function App() {
       return;
     }
 
+    // Halaman wajib login untuk guest -> simpan tujuan lalu arahkan ke Login
     if (PROTECTED_VIEWS.includes(currentView) && !currentUser) {
+      pendingViewRef.current = currentView;
       showToast('⚠️ Silakan login terlebih dahulu untuk mengakses halaman ini.');
       setCurrentView('login');
       return;
     }
-    if (ADMIN_ONLY_VIEWS.includes(currentView) && currentUser?.role !== 'admin') {
-      showToast('⛔ Halaman Admin hanya untuk Admin Toko.');
-      setCurrentView('home');
-      return;
+
+    // Panel Admin hanya untuk role admin
+    if (ADMIN_ONLY_VIEWS.includes(currentView)) {
+      if (!currentUser) {
+        pendingViewRef.current = 'admin';
+        try {
+          if (window.location.pathname.toLowerCase().startsWith('/admin')) {
+            window.history.replaceState({}, '', '/');
+          }
+        } catch {}
+        showToast('⚠️ Silakan login sebagai Admin untuk membuka Panel Admin.');
+        setCurrentView('login');
+        return;
+      }
+      if (currentUser.role !== 'admin') {
+        try {
+          if (window.location.pathname.toLowerCase().startsWith('/admin')) {
+            window.history.replaceState({}, '', '/');
+          }
+        } catch {}
+        showToast('⛔ Halaman Admin hanya untuk Admin Toko.');
+        setCurrentView('home');
+        return;
+      }
     }
 
-    // Sinkronkan URL /lacak-pesanan khusus untuk customer
+    // Sinkronkan URL /lacak-pesanan khusus untuk customer yang login
     try {
-      if (currentView === 'account' && currentUser?.role !== 'admin') {
+      if (currentView === 'account' && currentUser && currentUser.role !== 'admin') {
         if (window.location.pathname !== '/lacak-pesanan') {
           window.history.replaceState({}, '', '/lacak-pesanan');
         }
@@ -335,50 +413,27 @@ export default function App() {
   };
 
   // ── LOGIN / LOGOUT HANDLERS ───────────────────────────────────────────
-  const handleSwitchRole = (newRole) => {
-    setCurrentRole(newRole);
-    try {
-      localStorage.setItem('kb_role', newRole);
-    } catch (e) {}
+  // Khusus admin asli untuk beralih tampilan antara Panel Admin dan preview Toko Pembeli
+  const handleSwitchRole = (targetMode) => {
+    if (currentUser?.role !== 'admin') {
+      showToast('⛔ Fitur ini hanya tersedia untuk Admin Toko.');
+      return;
+    }
 
-    if (newRole === 'admin') {
-      // Pastikan ada sesi profil admin aktif jika belum login admin di Supabase
-      if (!currentUser || currentUser.role !== 'admin') {
-        const defaultAdmin = {
-          id: 'admin-owner-unsri',
-          name: 'Admin Toko (Owner)',
-          email: 'admin@knotandbloom.com',
-          role: 'admin',
-          avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80'
-        };
-        setCurrentUser(defaultAdmin);
-      }
+    if (targetMode === 'admin') {
+      setAdminStorePreview(false);
       setCurrentView('admin');
-      showToast('👑 Mode Admin Toko aktif! Anda dapat mengelola pesanan & produk.');
     } else {
-      // Jika sebelumnya memakai default admin dummy saat switch role, reset
-      if (currentUser?.id === 'admin-owner-unsri') {
-        setCurrentUser(null);
-      }
+      setAdminStorePreview(true);
       if (currentView === 'admin') setCurrentView('home');
-      showToast('🌸 Mode Pembeli (Customer) aktif! Selamat berbelanja di Knot & Bloom.');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleLoginSuccess = (userProfile) => {
+    if (!userProfile) return;
     setCurrentUser(userProfile);
-    if (userProfile.role === 'admin') {
-      setCurrentRole('admin');
-      try { localStorage.setItem('kb_role', 'admin'); } catch {}
-      setCurrentView('admin');
-      showToast(`👑 Selamat datang, ${userProfile.name}! Panel Admin aktif.`);
-    } else {
-      setCurrentRole('customer');
-      try { localStorage.setItem('kb_role', 'customer'); } catch {}
-      setCurrentView('account');
-      showToast(`🌸 Halo ${userProfile.name}! Selamat berbelanja.`);
-    }
+    navigateAfterLogin(userProfile);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -388,12 +443,21 @@ export default function App() {
     } catch (e) {
       console.warn('Logout error:', e.message);
     }
-    setCurrentUser(false);
+    lastNavigatedUserIdRef.current = null;
+    pendingViewRef.current = null;
+    setCurrentUser(null);
+    setAdminStorePreview(false);
+    setOrders([]);
+    try { localStorage.removeItem('kb_orders'); } catch {}
     setCurrentView('home');
+    try {
+      const p = window.location.pathname.toLowerCase();
+      if (p === '/lacak-pesanan' || p === '/admin' || p.startsWith('/admin/')) {
+        window.history.replaceState({}, '', '/');
+      }
+    } catch {}
     showToast('Anda telah keluar dari akun.');
   };
-
-  // handleSwitchRole sudah ada di atas — role juga bisa diswitch manual via Navbar
 
   // Product Management Handlers (Admin - Local & Server Synchronized)
   const handleAddProduct = async (newProduct) => {
@@ -630,8 +694,15 @@ export default function App() {
     showToast('Produk dihapus dari keranjang.');
   };
 
-  // Toggle Wishlist
+  // Toggle Wishlist (Wajib login; guest diarahkan ke Login lalu kembali setelah berhasil)
   const handleToggleWishlist = (product) => {
+    if (!currentUser) {
+      pendingViewRef.current = currentView === 'login' ? 'account-wishlist' : currentView;
+      showToast('⚠️ Silakan login terlebih dahulu untuk menyimpan Wishlist.');
+      setCurrentView('login');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (wishlist.includes(product.id)) {
       setWishlist((prev) => prev.filter((id) => id !== product.id));
       showToast(`"${product.name}" dihapus dari Wishlist.`);
@@ -677,7 +748,7 @@ export default function App() {
   return (
     <div className="app-root">
       {/* 1. Header / Navbar */}
-      {currentRole === 'admin' ? (
+      {isAdminMode ? (
         <AdminNavbar
           onSwitchRole={handleSwitchRole}
           pendingOrdersCount={pendingOrdersCount}
@@ -688,18 +759,18 @@ export default function App() {
         />
       ) : (
         <Navbar
-          currentRole={currentRole}
+          currentRole={userRole}
           onSwitchRole={handleSwitchRole}
-          pendingOrdersCount={pendingOrdersCount}
+          pendingOrdersCount={currentUser ? pendingOrdersCount : 0}
           currentView={currentView}
           setCurrentView={setCurrentView}
           cartCount={totalCartCount}
-          wishlistCount={wishlist.length}
+          wishlistCount={currentUser ? wishlist.length : 0}
           onOpenCart={() => setIsCartOpen(true)}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           onSelectCategory={setSelectedCategory}
-          currentUser={currentUser || null}
+          currentUser={currentUser}
           onLogout={handleLogout}
         />
       )}
@@ -715,8 +786,8 @@ export default function App() {
           />
         )}
 
-        {/* Admin Portal View */}
-        {(currentView === 'admin' || (currentRole === 'admin' && currentView === 'admin')) && (
+        {/* Admin Portal View (hanya untuk role admin yang terverifikasi) */}
+        {currentView === 'admin' && userRole === 'admin' && (
           <AdminPortalPage
             products={products}
             orders={orders}
@@ -738,7 +809,7 @@ export default function App() {
             reviews={reviews}
             onSelectProduct={handleSelectProduct}
             onAddToCart={handleAddToCart}
-            wishlist={wishlist}
+            wishlist={currentUser ? wishlist : []}
             onToggleWishlist={handleToggleWishlist}
             onNavigate={handleNavigate}
             onOpenCustomOrder={() => setIsCustomOrderOpen(true)}
@@ -750,7 +821,7 @@ export default function App() {
             products={products}
             onSelectProduct={handleSelectProduct}
             onAddToCart={handleAddToCart}
-            wishlist={wishlist}
+            wishlist={currentUser ? wishlist : []}
             onToggleWishlist={handleToggleWishlist}
             initialCategory={selectedCategory}
             searchQuery={searchQuery}
@@ -764,7 +835,7 @@ export default function App() {
             allProducts={products}
             onSelectProduct={handleSelectProduct}
             onAddToCart={handleAddToCart}
-            wishlist={wishlist}
+            wishlist={currentUser ? wishlist : []}
             onToggleWishlist={handleToggleWishlist}
             onBackToShop={() => setCurrentView('shop')}
             showToast={showToast}
@@ -785,7 +856,7 @@ export default function App() {
           />
         )}
 
-        {(currentView === 'account' || currentView === 'account-wishlist' || currentView === 'account-chat') && (
+        {currentUser && (currentView === 'account' || currentView === 'account-wishlist' || currentView === 'account-chat') && (
           <MyAccountPage
             userOrders={orders}
             wishlist={wishlist}
@@ -824,7 +895,7 @@ export default function App() {
       </main>
 
       {/* 3. Footer */}
-      {currentRole === 'admin' ? (
+      {isAdminMode ? (
         <footer className="admin-footer-simple">
           <div className="container admin-footer-container">
             <span>© 2026 Knot & Bloom • <strong>Admin Studio Portal</strong></span>
@@ -835,8 +906,8 @@ export default function App() {
         <Footer setCurrentView={setCurrentView} />
       )}
 
-      {/* 4. Customer Features & Modals (Khusus Peran Pembeli) */}
-      {currentRole === 'customer' && (
+      {/* 4. Storefront Features & Modals (Tersedia untuk Guest & Pembeli) */}
+      {!isAdminMode && (
         <>
           <CartDrawer
             isOpen={isCartOpen}
@@ -847,7 +918,13 @@ export default function App() {
             onRemoveItem={handleRemoveFromCart}
             onProceedToCheckout={() => {
               setIsCartOpen(false);
-              setCurrentView('checkout');
+              if (!currentUser) {
+                pendingViewRef.current = 'checkout';
+                showToast('⚠️ Silakan login terlebih dahulu untuk melanjutkan ke Checkout.');
+                setCurrentView('login');
+              } else {
+                setCurrentView('checkout');
+              }
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onSelectProduct={handleSelectProduct}

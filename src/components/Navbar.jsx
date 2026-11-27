@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Search, Heart, ShoppingBag, User, Menu, X, LogIn, LogOut, Shield } from 'lucide-react';
 
 export default function Navbar({
-  currentRole = 'customer',
+  currentRole = null,
   onSwitchRole,
   pendingOrdersCount = 0,
   currentView,
@@ -25,7 +25,7 @@ export default function Navbar({
     { id: 'home', label: 'Home' },
     { id: 'shop', label: 'Shop' },
     ...(!isAdminUser
-      ? [{ id: 'account', label: 'Lacak Pesanan', badge: pendingOrdersCount }]
+      ? [{ id: 'account', label: 'Lacak Pesanan', badge: currentUser ? pendingOrdersCount : 0 }]
       : []),
     { id: 'blog', label: 'Blog' },
     { id: 'about', label: 'About' }
