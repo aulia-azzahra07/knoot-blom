@@ -166,6 +166,43 @@ export default function OrderTrackingStepper({
   const activeStepData = steps[selectedStepIndex] || steps[0];
   const ActiveStepIcon = activeStepData.icon;
 
+  if (isCancelled) {
+    return (
+      <div
+        className={`order-tracking-interactive-card ${compact ? 'tracking-compact-mode' : ''}`}
+        style={{
+          background: '#FEF2F2',
+          border: '1.5px solid #FECACA'
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '14px'
+          }}
+        >
+          <XCircle size={26} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <h4 style={{ margin: 0, color: '#991B1B', fontSize: '1rem' }}>
+              Pesanan ini sudah dibatalkan
+            </h4>
+            {orderDate && (
+              <p style={{ margin: 0, color: '#7F1D1D', fontSize: '0.84rem' }}>
+                Tanggal pembatalan: <strong>{orderDate}</strong>
+              </p>
+            )}
+            {alasanBatal && (
+              <p style={{ margin: 0, color: '#7F1D1D', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                <strong>Alasan pembatalan:</strong> {alasanBatal}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`order-tracking-interactive-card ${compact ? 'tracking-compact-mode' : ''}`}>
       {/* 1. Header Bar */}
@@ -178,15 +215,13 @@ export default function OrderTrackingStepper({
           <h4 className="tracking-current-status-title">
             Status:{' '}
             <span className="status-highlight-text">
-              {isCancelled ? 'Dibatalkan' : steps[effectiveActiveIndex].title}
+              {steps[effectiveActiveIndex].title}
             </span>
           </h4>
-          {!isCancelled && (
-            <span className="tracking-eta-badge">
-              <Clock size={13} />
-              <span>Estimasi: {steps[effectiveActiveIndex].duration}</span>
-            </span>
-          )}
+          <span className="tracking-eta-badge">
+            <Clock size={13} />
+            <span>Estimasi: {steps[effectiveActiveIndex].duration}</span>
+          </span>
         </div>
 
         <div className="tracking-header-actions">
@@ -204,33 +239,8 @@ export default function OrderTrackingStepper({
         </div>
       </div>
 
-      {/* Banner Khusus Jika Pesanan Dibatalkan */}
-      {isCancelled ? (
-        <div
-          style={{
-            background: '#FEF2F2',
-            border: '1.5px solid #FECACA',
-            borderRadius: '14px',
-            padding: '18px 20px',
-            marginTop: '14px',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '14px'
-          }}
-        >
-          <XCircle size={26} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
-          <div>
-            <h5 style={{ margin: '0 0 6px', color: '#991B1B', fontSize: '1rem' }}>
-              Pesanan #{orderId} Dibatalkan
-            </h5>
-            <p style={{ margin: 0, color: '#7F1D1D', fontSize: '0.9rem', lineHeight: 1.5 }}>
-              <strong>Alasan pembatalan:</strong>{' '}
-              {alasanBatal || 'Pesanan dibatalkan oleh toko.'}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <>
+      {/* 2. Stepper 4 Tahap: Dirajut, Packing, Diantar, Selesai */}
+      <>
           {/* 2. Stepper 4 Tahap: Dirajut, Packing, Diantar, Selesai */}
           <div className="tracking-stepper-container">
             <div className="stepper-helper-hint">
@@ -416,8 +426,7 @@ export default function OrderTrackingStepper({
               </div>
             </div>
           )}
-        </>
-      )}
+      </>
     </div>
   );
 }

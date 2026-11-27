@@ -24,7 +24,9 @@ import {
   Calendar,
   CheckCircle2,
   FileText,
-  Star
+  Star,
+  XCircle,
+  RotateCcw
 } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 import OrderTrackingStepper from '../components/OrderTrackingStepper';
@@ -205,6 +207,39 @@ export default function MyAccountPage({
 
   const activeOrdersPool = authorizedUserOrders;
 
+  const isCancelledOrder = (order) =>
+    String(order?.status || '').toLowerCase().trim() === 'dibatalkan';
+
+  const formatCancellationDate = (order) => {
+    const cancelEntry = Array.isArray(order?.history)
+      ? [...order.history]
+          .reverse()
+          .find((h) => String(h?.status || '').toLowerCase().includes('batal'))
+      : null;
+    const rawTs =
+      cancelEntry?.created_at ||
+      order?.raw?.updated_at ||
+      order?.created_at ||
+      order?.date;
+    if (!rawTs) return '';
+    if (typeof rawTs === 'string' && rawTs.includes('WIB')) return rawTs;
+    try {
+      const d = new Date(rawTs);
+      if (Number.isNaN(d.getTime())) return String(rawTs);
+      return (
+        d.toLocaleString('id-ID', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) + ' WIB'
+      );
+    } catch {
+      return String(rawTs);
+    }
+  };
+
   // Urutkan selalu dari yang terbaru (created_at DESC)
   const sortedOrdersPool = [...activeOrdersPool].sort((a, b) => {
     const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
@@ -212,33 +247,122 @@ export default function MyAccountPage({
     return timeB - timeA;
   });
 
-  // Filter berdasarkan search keyword & status chip (Dirajut, Packing, Diantar, Selesai, Dibatalkan)
+  // Pisahkan pesanan aktif/selesai dari pesanan Dibatalkan
+  const nonCancelledOrders = sortedOrdersPool.filter((o) => !isCancelledOrder(o));
+  const cancelledOrders = sortedOrdersPool.filter((o) => isCancelledOrder(o));
+
+  // Hitung jumlah tiap chip filter secara konsisten
+  const dirajutCount = nonCancelledOrders.filter(
+    (o) => String(o.status || '').toLowerCase().trim() === 'dirajut'
+  ).length;
+  const packingCount = nonCancelledOrders.filter(
+    (o) => String(o.status || '').toLowerCase().trim() === 'packing'
+  ).length;
+  const diantarCount = nonCancelledOrders.filter((o) => {
+    const st = String(o.status || '').toLowerCase().trim();
+    return st === 'diantar' || st.includes('diantar');
+  }).length;
+  const selesaiCount = nonCancelledOrders.filter(
+    (o) => String(o.status || '').toLowerCase().trim() === 'selesai'
+  ).length;
+  const cancelledCount = cancelledOrders.length;
+
+  // Filter berdasarkan chip status aktif, lalu pencarian di dalam filter tersebut
+  // Default & "Semua" HANYA menampilkan pesanan aktif & selesai (TIDAK termasuk Dibatalkan)
   const filteredOrders = sortedOrdersPool.filter((order) => {
+    const st = String(order.status || '').toLowerCase().trim();
+    let matchesStatus = false;
+
+    if (statusFilter === 'all') {
+      matchesStatus = st !== 'dibatalkan';
+    } else if (statusFilter === 'dirajut') {
+      matchesStatus = st === 'dirajut';
+    } else if (statusFilter === 'packing') {
+      matchesStatus = st === 'packing';
+    } else if (statusFilter === 'diantar') {
+      matchesStatus = st === 'diantar' || st.includes('diantar');
+    } else if (statusFilter === 'selesai') {
+      matchesStatus = st === 'selesai';
+    } else if (statusFilter === 'dibatalkan') {
+      matchesStatus = st === 'dibatalkan';
+    }
+
+    if (!matchesStatus) return false;
+
     const q = trackingSearch.toLowerCase().trim();
+    if (!q) return true;
     const idMatch = String(order.id || '').toLowerCase().includes(q);
     const summaryMatch = String(order.itemsSummary || '').toLowerCase().includes(q);
+    const itemsNameMatch = Array.isArray(order.items)
+      ? order.items.some((item) => String(item?.name || '').toLowerCase().includes(q))
+      : false;
     const addressMatch = String(order.customer?.address || '').toLowerCase().includes(q);
-    const matchesSearch = !q || idMatch || summaryMatch || addressMatch;
-
-    if (!matchesSearch) return false;
-
-    const st = (order.status || '').toLowerCase().trim();
-    if (statusFilter === 'dirajut') return st === 'dirajut';
-    if (statusFilter === 'packing') return st === 'packing';
-    if (statusFilter === 'diantar') return st === 'diantar' || st.includes('diantar');
-    if (statusFilter === 'selesai') return st === 'selesai';
-    if (statusFilter === 'dibatalkan') return st === 'dibatalkan';
-    return true;
+    return idMatch || summaryMatch || itemsNameMatch || addressMatch;
   });
 
-  // Hitung status pesanan untuk statistik
-  const activeOrdersCount = activeOrdersPool.filter(
-    (o) => o.status === 'Dirajut' || o.status === 'Packing' || o.status === 'Diantar'
-  ).length;
+  // Hitung status pesanan untuk statistik Dashboard (TIDAK menghitung pesanan Dibatalkan)
+  const activeOrdersCount = dirajutCount + packingCount + diantarCount;
+  const completedOrdersCount = selesaiCount;
 
-  const completedOrdersCount = activeOrdersPool.filter(
-    (o) => o.status === 'Selesai'
-  ).length;
+  // Cek produk pada pesanan yang masih aktif & memiliki stok (untuk tombol "Beli Lagi")
+  const getReorderableProducts = (order) => {
+    if (!Array.isArray(order?.items) || !Array.isArray(allProducts) || allProducts.length === 0) {
+      return [];
+    }
+    const matched = [];
+    for (const item of order.items) {
+      const prodId = item.productId || item.id;
+      const baseName = String(item.name || '').split(' - ')[0].trim().toLowerCase();
+      const prod = allProducts.find(
+        (p) =>
+          p.is_active !== false &&
+          ((prodId && p.id === prodId) ||
+            (baseName && String(p.name || '').toLowerCase() === baseName))
+      );
+      if (!prod) continue;
+
+      const activeVars = Array.isArray(prod.variants)
+        ? prod.variants.filter((v) => v.is_active !== false)
+        : [];
+      if (activeVars.length > 0) {
+        const variantPart = String(item.name || '').includes(' - ')
+          ? String(item.name).split(' - ').slice(1).join(' - ').trim().toLowerCase()
+          : '';
+        const preferredVar =
+          activeVars.find(
+            (v) =>
+              variantPart &&
+              String(v.name || '').toLowerCase() === variantPart &&
+              (Number(v.stock) || 0) > 0
+          ) || activeVars.find((v) => (Number(v.stock) || 0) > 0);
+        if (!preferredVar) continue;
+        matched.push({
+          ...prod,
+          quantity: Math.min(Math.max(1, Number(item.quantity) || 1), Number(preferredVar.stock) || 1),
+          variant_id: preferredVar.id,
+          selectedColor: preferredVar
+        });
+      } else if ((Number(prod.stock) || 0) > 0) {
+        matched.push({
+          ...prod,
+          quantity: Math.min(Math.max(1, Number(item.quantity) || 1), Number(prod.stock) || 1),
+          selectedColor: null
+        });
+      }
+    }
+    return matched;
+  };
+
+  const handleReorderOrder = (order) => {
+    const itemsToAdd = getReorderableProducts(order);
+    if (itemsToAdd.length === 0) {
+      if (showToast) showToast('Produk pada pesanan ini sudah tidak tersedia atau stok habis.');
+      return;
+    }
+    itemsToAdd.forEach((prod) => {
+      if (onAddToCart) onAddToCart(prod);
+    });
+  };
 
   const userName = currentUser?.name || '';
   const userEmail = currentUser?.email || '';
@@ -414,7 +538,7 @@ export default function MyAccountPage({
                     </div>
                     <div>
                       <span className="stat-label">Total Pesanan Saya</span>
-                      <h3 className="stat-value">{activeOrdersPool.length} Pesanan</h3>
+                      <h3 className="stat-value">{nonCancelledOrders.length} Pesanan</h3>
                     </div>
                   </div>
 
@@ -479,8 +603,15 @@ export default function MyAccountPage({
                   );
                 }
 
-                // Riwayat timeline status dari order_status_history
-                const orderTimelineHistory = Array.isArray(selectedTrackingOrder.history) && selectedTrackingOrder.history.length > 0
+                const isSelectedOrderCancelled = isCancelledOrder(selectedTrackingOrder);
+                const cancelledAtLabel = isSelectedOrderCancelled
+                  ? formatCancellationDate(selectedTrackingOrder)
+                  : '';
+
+                // Riwayat timeline status dari order_status_history (hanya untuk pesanan non-batal)
+                const orderTimelineHistory = isSelectedOrderCancelled
+                  ? []
+                  : Array.isArray(selectedTrackingOrder.history) && selectedTrackingOrder.history.length > 0
                   ? selectedTrackingOrder.history
                   : [
                     {
@@ -508,13 +639,6 @@ export default function MyAccountPage({
                       ? [{
                         status: 'Selesai',
                         keterangan: 'Pesanan telah diterima pembeli dan pembayaran tunai (COD) telah dibayar lunas.',
-                        created_at: selectedTrackingOrder.date
-                      }]
-                      : []),
-                    ...(selectedTrackingOrder.status === 'Dibatalkan'
-                      ? [{
-                        status: 'Dibatalkan',
-                        keterangan: `Pesanan dibatalkan. Alasan: ${selectedTrackingOrder.alasan_batal || '-'}`,
                         created_at: selectedTrackingOrder.date
                       }]
                       : [])
@@ -556,81 +680,116 @@ export default function MyAccountPage({
                       </div>
                     </div>
 
-                    {/* Komponen Visual Stepper 4 Tahap: Dirajut, Packing, Diantar, Selesai */}
-                    <OrderTrackingStepper
-                      status={selectedTrackingOrder.status}
-                      orderDate={selectedTrackingOrder.date}
-                      orderId={selectedTrackingOrder.id}
-                      customerAddress={selectedTrackingOrder.customer?.address}
-                      customerName={selectedTrackingOrder.customer?.name}
-                      estimasiAntar={selectedTrackingOrder.estimasi_antar}
-                      pengantar={selectedTrackingOrder.pengantar}
-                      alasanBatal={selectedTrackingOrder.alasan_batal}
-                      total={selectedTrackingOrder.total}
-                      onChatOrder={() => {
-                        if (!currentUser) {
-                          const nav = onNavigate || _onNavigate;
-                          if (nav) nav('login');
-                          return;
-                        }
-                        setSelectedOrderForChat(selectedTrackingOrder);
-                        setCurrentTab('chat');
-                        setTrackingViewMode('list');
-                      }}
-                      onScrollToReview={
-                        selectedTrackingOrder.status === 'Selesai' && selectedTrackingOrder.dbId
-                          ? () => {
-                            const el = document.getElementById('order-review-section');
-                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    {/* Pesanan Dibatalkan: JANGAN tampilkan stepper atau timeline, hanya kartu info */}
+                    {isSelectedOrderCancelled ? (
+                      <div
+                        style={{
+                          background: '#FEF2F2',
+                          border: '1.5px solid #FECACA',
+                          borderRadius: '16px',
+                          padding: '22px 24px',
+                          marginBottom: '20px',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '14px'
+                        }}
+                      >
+                        <XCircle size={28} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <h4 style={{ margin: 0, color: '#991B1B', fontSize: '1.08rem' }}>
+                            Pesanan ini sudah dibatalkan
+                          </h4>
+                          {cancelledAtLabel && (
+                            <p style={{ margin: 0, color: '#7F1D1D', fontSize: '0.86rem' }}>
+                              Tanggal pembatalan: <strong>{cancelledAtLabel}</strong>
+                            </p>
+                          )}
+                          {selectedTrackingOrder.alasan_batal && (
+                            <p style={{ margin: 0, color: '#7F1D1D', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                              Alasan pembatalan: <strong>{selectedTrackingOrder.alasan_batal}</strong>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Komponen Visual Stepper 4 Tahap: Dirajut, Packing, Diantar, Selesai */}
+                        <OrderTrackingStepper
+                          status={selectedTrackingOrder.status}
+                          orderDate={selectedTrackingOrder.date}
+                          orderId={selectedTrackingOrder.id}
+                          customerAddress={selectedTrackingOrder.customer?.address}
+                          customerName={selectedTrackingOrder.customer?.name}
+                          estimasiAntar={selectedTrackingOrder.estimasi_antar}
+                          pengantar={selectedTrackingOrder.pengantar}
+                          alasanBatal={selectedTrackingOrder.alasan_batal}
+                          total={selectedTrackingOrder.total}
+                          onChatOrder={() => {
+                            if (!currentUser) {
+                              const nav = onNavigate || _onNavigate;
+                              if (nav) nav('login');
+                              return;
+                            }
+                            setSelectedOrderForChat(selectedTrackingOrder);
+                            setCurrentTab('chat');
+                            setTrackingViewMode('list');
+                          }}
+                          onScrollToReview={
+                            selectedTrackingOrder.status === 'Selesai' && selectedTrackingOrder.dbId
+                              ? () => {
+                                const el = document.getElementById('order-review-section');
+                                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                              }
+                              : null
                           }
-                          : null
-                      }
-                    />
+                        />
 
-                    {/* Timeline Riwayat Status Berurutan (order_status_history) */}
-                    <div className="order-history-timeline-card">
-                      <div className="card-head-simple">
-                        <Clock size={18} color="#FF86C1" />
-                        <h5>Riwayat Perubahan Status Pesanan (Timeline Berurutan)</h5>
-                      </div>
+                        {/* Timeline Riwayat Status Berurutan (order_status_history) */}
+                        <div className="order-history-timeline-card">
+                          <div className="card-head-simple">
+                            <Clock size={18} color="#FF86C1" />
+                            <h5>Riwayat Perubahan Status Pesanan (Timeline Berurutan)</h5>
+                          </div>
 
-                      <div className="timeline-history-vertical-list">
-                        {orderTimelineHistory.map((step, sIdx) => {
-                          const isLast = sIdx === orderTimelineHistory.length - 1;
-                          const formattedTime = step.created_at
-                            ? (step.created_at.includes('WIB')
-                              ? step.created_at
-                              : new Date(step.created_at).toLocaleString('id-ID', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              }) + ' WIB')
-                            : 'Waktu Tercatat';
+                          <div className="timeline-history-vertical-list">
+                            {orderTimelineHistory.map((step, sIdx) => {
+                              const isLast = sIdx === orderTimelineHistory.length - 1;
+                              const formattedTime = step.created_at
+                                ? (step.created_at.includes('WIB')
+                                  ? step.created_at
+                                  : new Date(step.created_at).toLocaleString('id-ID', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  }) + ' WIB')
+                                : 'Waktu Tercatat';
 
-                          return (
-                            <div key={step.id || sIdx} className="timeline-history-item-row">
-                              <div className="timeline-node-col">
-                                <div className="timeline-step-circle-done">
-                                  <CheckCircle2 size={15} color="#FFFFFF" />
+                              return (
+                                <div key={step.id || sIdx} className="timeline-history-item-row">
+                                  <div className="timeline-node-col">
+                                    <div className="timeline-step-circle-done">
+                                      <CheckCircle2 size={15} color="#FFFFFF" />
+                                    </div>
+                                    {!isLast && <div className="timeline-connecting-bar" />}
+                                  </div>
+
+                                  <div className="timeline-desc-col">
+                                    <div className="timeline-time-meta">
+                                      <Calendar size={13} color="#6B7280" />
+                                      <span>{formattedTime}</span>
+                                    </div>
+                                    <h6 className="timeline-stage-title">{step.status}</h6>
+                                    <p className="timeline-stage-desc">{step.keterangan}</p>
+                                  </div>
                                 </div>
-                                {!isLast && <div className="timeline-connecting-bar" />}
-                              </div>
-
-                              <div className="timeline-desc-col">
-                                <div className="timeline-time-meta">
-                                  <Calendar size={13} color="#6B7280" />
-                                  <span>{formattedTime}</span>
-                                </div>
-                                <h6 className="timeline-stage-title">{step.status}</h6>
-                                <p className="timeline-stage-desc">{step.keterangan}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     {/* Informasi Rincian Pesanan & Alamat Pengiriman */}
                     <div className="order-full-detail-grid">
@@ -861,7 +1020,8 @@ export default function MyAccountPage({
                     </div>
                     <div className="head-badge-right-group">
                       <span className="orders-count-badge">
-                        {filteredOrders.length} dari {activeOrdersPool.length} Pesanan
+                        {filteredOrders.length} dari{' '}
+                        {statusFilter === 'dibatalkan' ? cancelledCount : nonCancelledOrders.length} Pesanan
                       </span>
                     </div>
                   </div>
@@ -917,49 +1077,49 @@ export default function MyAccountPage({
                       )}
                     </div>
 
-                    {/* Filter Status Chips */}
+                    {/* Filter Status Chips (Semua = pesanan aktif & selesai, TIDAK termasuk Dibatalkan) */}
                     <div className="tracking-filter-chips">
                       <button
                         type="button"
                         className={`filter-chip ${statusFilter === 'all' ? 'active' : ''}`}
                         onClick={() => setStatusFilter('all')}
                       >
-                        <span>Semua Status ({activeOrdersPool.length})</span>
+                        <span>Semua ({nonCancelledOrders.length})</span>
                       </button>
                       <button
                         type="button"
                         className={`filter-chip ${statusFilter === 'dirajut' ? 'active' : ''}`}
                         onClick={() => setStatusFilter('dirajut')}
                       >
-                        <span>Dirajut</span>
+                        <span>Dirajut ({dirajutCount})</span>
                       </button>
                       <button
                         type="button"
                         className={`filter-chip ${statusFilter === 'packing' ? 'active' : ''}`}
                         onClick={() => setStatusFilter('packing')}
                       >
-                        <span>Packing</span>
+                        <span>Packing ({packingCount})</span>
                       </button>
                       <button
                         type="button"
                         className={`filter-chip ${statusFilter === 'diantar' ? 'active' : ''}`}
                         onClick={() => setStatusFilter('diantar')}
                       >
-                        <span>Diantar</span>
+                        <span>Diantar ({diantarCount})</span>
                       </button>
                       <button
                         type="button"
                         className={`filter-chip ${statusFilter === 'selesai' ? 'active' : ''}`}
                         onClick={() => setStatusFilter('selesai')}
                       >
-                        <span>Selesai</span>
+                        <span>Selesai ({selesaiCount})</span>
                       </button>
                       <button
                         type="button"
                         className={`filter-chip ${statusFilter === 'dibatalkan' ? 'active' : ''}`}
                         onClick={() => setStatusFilter('dibatalkan')}
                       >
-                        <span>Dibatalkan</span>
+                        <span>Dibatalkan ({cancelledCount})</span>
                       </button>
                     </div>
                   </div>
@@ -970,18 +1130,39 @@ export default function MyAccountPage({
                       <div className="tracking-empty-box">
                         <ShoppingBag size={48} color="#FF86C1" style={{ margin: '0 auto 12px', opacity: 0.8 }} />
                         <h4>
-                          {activeOrdersPool.length === 0
-                            ? 'Belum Ada Pesanan'
-                            : 'Tidak Ada Pesanan yang Sesuai'}
+                          {trackingSearch
+                            ? 'Tidak Ada Pesanan yang Sesuai'
+                            : statusFilter === 'dibatalkan'
+                            ? 'Belum ada pesanan yang dibatalkan'
+                            : statusFilter === 'dirajut'
+                            ? 'Belum ada pesanan di tahap Dirajut'
+                            : statusFilter === 'packing'
+                            ? 'Belum ada pesanan di tahap Packing'
+                            : statusFilter === 'diantar'
+                            ? 'Belum ada pesanan yang sedang diantar'
+                            : statusFilter === 'selesai'
+                            ? 'Belum ada pesanan yang selesai'
+                            : 'Belum Ada Pesanan'}
                         </h4>
                         <p>
-                          {activeOrdersPool.length === 0
-                            ? 'Kamu belum memiliki riwayat pesanan. Yuk mulai belanja koleksi rajutan Knot & Bloom!'
-                            : trackingSearch
-                            ? `Tidak ditemukan pesanan dengan kata kunci "${trackingSearch}". Coba cari dengan nomor pesanan lain.`
-                            : 'Belum ada riwayat transaksi pada filter status yang dipilih.'}
+                          {trackingSearch
+                            ? `Tidak ditemukan pesanan dengan kata kunci "${trackingSearch}" pada filter ini.`
+                            : statusFilter === 'dibatalkan'
+                            ? 'Semua pesananmu yang dibatalkan akan tampil terpisah di sini.'
+                            : statusFilter !== 'all'
+                            ? 'Belum ada riwayat pesanan pada status yang dipilih.'
+                            : 'Kamu belum memiliki riwayat pesanan. Yuk mulai belanja koleksi rajutan Knot & Bloom!'}
                         </p>
-                        {activeOrdersPool.length === 0 ? (
+                        {trackingSearch ? (
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            onClick={() => setTrackingSearch('')}
+                            style={{ marginTop: '12px' }}
+                          >
+                            Hapus Pencarian
+                          </button>
+                        ) : statusFilter === 'all' && nonCancelledOrders.length === 0 ? (
                           (onNavigate || _onNavigate) && (
                             <button
                               type="button"
@@ -992,23 +1173,13 @@ export default function MyAccountPage({
                               Mulai Belanja Sekarang
                             </button>
                           )
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn-primary btn-sm"
-                            onClick={() => {
-                              setTrackingSearch('');
-                              setStatusFilter('all');
-                            }}
-                            style={{ marginTop: '12px' }}
-                          >
-                            Reset Pencarian & Filter
-                          </button>
-                        )}
+                        ) : null}
                       </div>
                     ) : (
                       filteredOrders.map((order, idx) => {
                         const isExpanded = !!expandedOrderIds[order.id];
+                        const isOrderCancelled = isCancelledOrder(order);
+                        const reorderableItems = isOrderCancelled ? getReorderableProducts(order) : [];
                         return (
                           <div key={order.id || idx} className="customer-order-card fade-in">
                             {/* Order Card Head */}
@@ -1018,9 +1189,11 @@ export default function MyAccountPage({
                                   No. Pesanan: <strong>#{order.id}</strong>
                                 </span>
                                 <span className="order-date-text">{order.date}</span>
-                                <span className="order-payment-chip">
-                                  Metode: <strong>{order.paymentMethod}</strong>
-                                </span>
+                                {!isOrderCancelled && (
+                                  <span className="order-payment-chip">
+                                    Metode: <strong>{order.paymentMethod}</strong>
+                                  </span>
+                                )}
                               </div>
 
                               <div className="order-right-meta">
@@ -1031,7 +1204,7 @@ export default function MyAccountPage({
                                       ? 'status-shipping'
                                       : order.status === 'Selesai'
                                         ? 'status-completed'
-                                        : order.status === 'Dibatalkan'
+                                        : isOrderCancelled
                                           ? 'status-cancelled'
                                           : 'status-pending'
                                     }`}
@@ -1052,6 +1225,17 @@ export default function MyAccountPage({
                                         .map((i) => `${i.name} (x${i.quantity})`)
                                         .join(', '))}
                                 </span>
+                                {isOrderCancelled && (
+                                  <p
+                                    style={{
+                                      margin: '6px 0 0',
+                                      fontSize: '0.8rem',
+                                      color: '#B91C1C'
+                                    }}
+                                  >
+                                    Alasan pembatalan: {order.alasan_batal || 'Pesanan dibatalkan.'}
+                                  </p>
+                                )}
                               </div>
 
                               <div className="order-total-block">
@@ -1060,16 +1244,31 @@ export default function MyAccountPage({
                               </div>
 
                               <div className="order-card-actions">
-                                {/* TOMBOL UTAMA: LACAK PESANAN (Membuka Halaman Detail Tracking) */}
-                                <button
-                                  type="button"
-                                  className="btn-open-detail-tracking-main"
-                                  onClick={() => handleOpenTrackingDetail(order)}
-                                  title="Buka rincian lengkap status & timeline pesanan"
-                                >
-                                  <Package size={15} />
-                                  <span>Lacak Pesanan →</span>
-                                </button>
+                                {/* Pesanan Dibatalkan: TIDAK ada tombol Lacak Pesanan */}
+                                {!isOrderCancelled && (
+                                  <button
+                                    type="button"
+                                    className="btn-open-detail-tracking-main"
+                                    onClick={() => handleOpenTrackingDetail(order)}
+                                    title="Buka rincian lengkap status & timeline pesanan"
+                                  >
+                                    <Package size={15} />
+                                    <span>Lacak Pesanan →</span>
+                                  </button>
+                                )}
+
+                                {isOrderCancelled && reorderableItems.length > 0 && (
+                                  <button
+                                    type="button"
+                                    className="btn-primary btn-sm"
+                                    onClick={() => handleReorderOrder(order)}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                                    title="Masukkan kembali produk yang masih tersedia ke keranjang"
+                                  >
+                                    <RotateCcw size={14} />
+                                    <span>Beli Lagi</span>
+                                  </button>
+                                )}
 
                                 <button
                                   type="button"
@@ -1082,9 +1281,33 @@ export default function MyAccountPage({
                               </div>
                             </div>
 
-                            {/* Quick Stepper Preview jika kartu dibuka */}
+                            {/* Rincian Pesanan jika kartu dibuka */}
                             {isExpanded && (
                               <div className="order-expanded-details fade-in" style={{ marginTop: '16px' }}>
+                                {isOrderCancelled && (
+                                  <div
+                                    style={{
+                                      background: '#FEF2F2',
+                                      border: '1px solid #FECACA',
+                                      borderRadius: '10px',
+                                      padding: '10px 14px',
+                                      marginBottom: '12px',
+                                      color: '#991B1B',
+                                      fontSize: '0.84rem'
+                                    }}
+                                  >
+                                    <strong>Pesanan ini sudah dibatalkan</strong>
+                                    {formatCancellationDate(order) && (
+                                      <span> • {formatCancellationDate(order)}</span>
+                                    )}
+                                    {order.alasan_batal && (
+                                      <div style={{ marginTop: '4px' }}>
+                                        Alasan: {order.alasan_batal}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
                                 <h5 className="details-header-title">Barang yang Dipesan:</h5>
                                 <div className="order-items-expanded-list">
                                   {order.items && order.items.length > 0 ? (
@@ -1131,15 +1354,17 @@ export default function MyAccountPage({
                                   )}
                                 </div>
 
-                                <div style={{ marginTop: '14px', textAlign: 'right' }}>
-                                  <button
-                                    type="button"
-                                    className="btn-primary btn-sm"
-                                    onClick={() => handleOpenTrackingDetail(order)}
-                                  >
-                                    <span>Buka Halaman Detail Tracking Lengkap →</span>
-                                  </button>
-                                </div>
+                                {!isOrderCancelled && (
+                                  <div style={{ marginTop: '14px', textAlign: 'right' }}>
+                                    <button
+                                      type="button"
+                                      className="btn-primary btn-sm"
+                                      onClick={() => handleOpenTrackingDetail(order)}
+                                    >
+                                      <span>Buka Halaman Detail Tracking Lengkap →</span>
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
