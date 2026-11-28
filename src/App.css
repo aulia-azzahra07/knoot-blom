@@ -9771,3 +9771,514 @@
 .admin-attached-order-close:hover {
   background: rgba(230, 57, 133, 0.12);
 }
+
+/* ==========================================================================
+   ADMIN FORM DYNAMIC ROWS (VARIANTS & SPECS)
+   ========================================================================== */
+.admin-variant-row {
+  display: grid;
+  grid-template-columns: 1.4fr auto 90px auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-spec-row {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ==========================================================================
+   COMPREHENSIVE MOBILE & TABLET RESPONSIVE POLISH
+   ========================================================================== */
+.app-root,
+.main-content-body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+@media (max-width: 1024px) {
+  .categories-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .values-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .blog-posts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .visi-misi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Account Sidebar jadi bar navigasi horizontal rapi di tablet/HP */
+  .account-nav-list {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .account-nav-list li {
+    flex-shrink: 0;
+  }
+
+  .account-nav-item {
+    white-space: nowrap;
+    padding: 9px 14px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* ── Navbar Mobile ── */
+  .navbar-container {
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .brand-tagline {
+    display: none;
+  }
+
+  .brand-title {
+    font-size: 1.15rem;
+  }
+
+  .logo-icon-wrap svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .navbar-actions {
+    gap: 6px;
+  }
+
+  .btn-navbar-login {
+    padding: 7px 12px;
+    font-size: 0.78rem;
+  }
+
+  .btn-navbar-login span {
+    white-space: nowrap;
+  }
+
+  .admin-panel-shortcut-btn span:not(.admin-shortcut-badge) {
+    display: none;
+  }
+
+  .search-form {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .search-form input {
+    min-width: 0;
+    font-size: 0.88rem;
+  }
+
+  /* ── Home Hero & Sections ── */
+  .hero-section {
+    padding-top: 14px;
+  }
+
+  .hero-banner-card {
+    padding: 24px 18px;
+    gap: 24px;
+  }
+
+  .hero-title {
+    font-size: 1.85rem;
+  }
+
+  .hero-description {
+    font-size: 0.9rem;
+  }
+
+  .hero-btn-group {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .hero-stats-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .hero-floating-bubble {
+    font-size: 0.72rem;
+    padding: 6px 10px;
+    left: 6px;
+    right: auto;
+    max-width: calc(100% - 12px);
+  }
+
+  .hero-floating-bubble.bubble-2 {
+    left: auto;
+    right: 6px;
+  }
+
+  .section-head-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .promo-banner-box {
+    grid-template-columns: 1fr;
+    padding: 22px 18px;
+    gap: 16px;
+  }
+
+  .promo-title {
+    font-size: 1.35rem;
+  }
+
+  .promo-banner-img {
+    max-height: 220px;
+  }
+
+  .products-grid-4,
+  .products-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  /* ── Shop Page ── */
+  .shop-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .shop-top-controls {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .shop-search-input-wrap {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .shop-select-wrap,
+  .shop-sort-select {
+    width: 100%;
+  }
+
+  /* ── Product Detail Page ── */
+  .detail-breadcrumbs {
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    gap: 4px;
+  }
+
+  .detail-product-title {
+    font-size: 1.55rem;
+  }
+
+  .detail-current-price {
+    font-size: 1.5rem;
+  }
+
+  .detail-trust-cards {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .specs-grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-tab-headers {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .detail-tab-headers .tab-btn {
+    white-space: nowrap;
+    padding: 10px 14px;
+    font-size: 0.86rem;
+  }
+
+  .detail-btn-group {
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .btn-add-cart-large {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 0.9rem;
+  }
+
+  /* ── Cart Drawer ── */
+  .cart-drawer {
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .cart-rec-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  /* ── Checkout Page ── */
+  .checkout-card,
+  .checkout-summary-card {
+    padding: 18px 14px;
+  }
+
+  .order-success-modal {
+    max-width: calc(100vw - 24px);
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 22px 16px;
+  }
+
+  /* ── MyAccountPage & Order Tracking ── */
+  .section-head-flex,
+  .tracking-detail-nav-bar,
+  .order-card-meta-bar,
+  .order-card-summary-row,
+  .tracking-card-header,
+  .detail-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .order-card-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .order-full-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .order-expanded-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-checklist-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .delivery-completed-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .tracking-filter-chips {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tracking-filter-chips .filter-chip {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* ── About & Blog ── */
+  .values-grid,
+  .blog-posts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .newsletter-form-row {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .newsletter-form-row input,
+  .newsletter-form-row button {
+    width: 100%;
+  }
+
+  /* ── Admin Portal ── */
+  .admin-tabs-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-tab-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+  }
+
+  .admin-products-header,
+  .admin-filter-bar,
+  .order-card-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .admin-filter-bar .search-input-wrapper,
+  .admin-filter-bar .category-select-wrapper,
+  .admin-filter-bar .category-dropdown {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .status-update-buttons {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .modal-dialog-custom,
+  .custom-order-modal {
+    max-width: calc(100vw - 20px);
+    max-height: 92vh;
+  }
+
+  .modal-header-custom,
+  .modal-body-custom,
+  .modal-footer-custom {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .custom-options-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-variant-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-variant-row input[type='text'] {
+    grid-column: 1 / -1;
+  }
+
+  .admin-spec-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .admin-spec-row input:first-child {
+    grid-column: 1 / -1;
+  }
+
+  /* ── Footer ── */
+  .footer-bottom {
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .footer-bottom-links {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  /* ── Small Phone (360px - 480px) ── */
+  .navbar-brand .brand-title {
+    font-size: 1rem;
+  }
+
+  .btn-navbar-login {
+    padding: 6px 10px;
+    font-size: 0.74rem;
+    gap: 4px;
+  }
+
+  .action-icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .hero-title {
+    font-size: 1.55rem;
+  }
+
+  .hero-btn-group .btn-hero,
+  .hero-btn-group .btn-hero-secondary {
+    width: 100%;
+  }
+
+  .category-pill-card {
+    padding: 14px 10px;
+  }
+
+  .cat-pill-name {
+    font-size: 0.84rem;
+  }
+
+  /* Stepper 4 tahap tetap sejajar & terbaca rapi di HP kecil */
+  .stepper-steps-wrapper {
+    gap: 4px;
+  }
+
+  .stepper-icon-bubble {
+    width: 38px;
+    height: 38px;
+  }
+
+  .stepper-step-number {
+    font-size: 0.62rem;
+  }
+
+  .stepper-step-title {
+    font-size: 0.74rem;
+  }
+
+  .stepper-step-badge-mini {
+    font-size: 0.6rem;
+    padding: 2px 5px;
+  }
+
+  /* BloomBot pas di layar HP kecil */
+  .chatbot-launcher-container {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .chatbot-floating-badge {
+    display: none;
+  }
+
+  .chatbot-window-card {
+    right: 10px;
+    left: 10px;
+    bottom: 78px;
+    width: auto;
+    max-width: none;
+    height: 72vh;
+    max-height: 540px;
+  }
+
+  .auth-card-box {
+    padding: 24px 18px;
+  }
+
+  .toast-container {
+    left: 10px;
+    right: 10px;
+    transform: none;
+  }
+
+  .toast {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+}

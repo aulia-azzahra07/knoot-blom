@@ -2120,11 +2120,8 @@ function ProductFormModal({ editingProduct, onClose, onSave }) {
                     {variants.map((v, idx) => (
                       <div
                         key={v.id || `new-${idx}`}
+                        className="admin-variant-row"
                         style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1.4fr auto 90px auto auto',
-                          gap: '8px',
-                          alignItems: 'center',
                           padding: '8px 10px',
                           borderRadius: '10px',
                           border: '1px solid #E5E7EB',
@@ -2213,10 +2210,7 @@ function ProductFormModal({ editingProduct, onClose, onSave }) {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {specRows.map((row, idx) => (
-                    <div
-                      key={idx}
-                      style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr auto', gap: '8px', alignItems: 'center' }}
-                    >
+                    <div key={idx} className="admin-spec-row">
                       <input
                         type="text"
                         placeholder="Label (misal: bahan, ukuran)"
